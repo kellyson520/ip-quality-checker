@@ -38,6 +38,7 @@ jobs:
 
       - name: Get date
         id: date
+        shell: bash
         run: echo "stamp=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
 
       - name: Setup Node.js
@@ -139,6 +140,7 @@ jobs:
 
       - name: Get date
         id: date
+        shell: bash
         run: echo "stamp=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
 
       - name: Setup Node.js
