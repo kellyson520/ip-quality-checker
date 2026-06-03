@@ -1,0 +1,107 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    # 每天 UTC 02:00 检查一次（北京时间 10:00）
+    - cron: '0 2 * * *'
+  workflow_dispatch: # 支持手动触发
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check upstream for changes
+        id: check
+        run: |
+          # 获取上游最新 ip.sh
+          curl -sL https://raw.githubusercontent.com/xykt/IPQuality/main/ip.sh -o /tmp/upstream_ip.sh
+          
+          # 获取当前仓库内的 ip.sh
+          cp src-tauri/scripts/ip.sh /tmp/local_ip.sh
+          
+          # 计算 hash
+          UPSTREAM_HASH=$(sha256sum /tmp/upstream_ip.sh | awk '{print $1}')
+          LOCAL_HASH=$(sha256sum /tmp/local_ip.sh | awk '{print $1}')
+          
+          echo "upstream_hash=$UPSTREAM_HASH" >> $GITHUB_OUTPUT
+          echo "local_hash=$LOCAL_HASH" >> $GITHUB_OUTPUT
+          
+          if [ "$UPSTREAM_HASH" != "$LOCAL_HASH" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "🔄 Upstream ip.sh has changed!"
+            echo "  Local:  $LOCAL_HASH"
+            echo "  Upstream: $UPSTREAM_HASH"
+            
+            # 获取上游版本号
+            UPSTREAM_VERSION=$(grep -oP 'script_version="[^"]*"' /tmp/upstream_ip.sh | head -1 | cut -d'"' -f2)
+            echo "upstream_version=$UPSTREAM_VERSION" >> $GITHUB_OUTPUT
+            echo "  Version: $UPSTREAM_VERSION"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "✅ No changes detected."
+          fi
+
+      - name: Sync upstream changes
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          # 替换 ip.sh
+          cp /tmp/upstream_ip.sh src-tauri/scripts/ip.sh
+          chmod +x src-tauri/scripts/ip.sh
+          
+          # 获取上游最新 commit 信息
+          UPSTREAM_COMMIT=$(curl -s https://api.github.com/repos/xykt/IPQuality/commits/main | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          sha = data['sha'][:8]
+          msg = data['commit']['message'].split('\n')[0][:80]
+          print(f'{sha}: {msg}')
+          " 2>/dev/null || echo "unknown")
+          
+          # 更新 CHANGELOG
+          VERSION="${{ steps.check.outputs.upstream_version }}"
+          DATE=$(date +%Y-%m-%d)
+          
+          # 在 CHANGELOG.md 开头添加新版本
+          sed -i "/^## \[Unreleased\]/a\\
+          \\n## [$VERSION] - $DATE (upstream sync)\\n\\n### Updated\\n- 🔄 同步上游 IPQuality 脚本 $VERSION\\n- 📝 上游变更: $UPSTREAM_COMMIT\\n" CHANGELOG.md
+          
+          # 配置 git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 提交
+          git add src-tauri/scripts/ip.sh CHANGELOG.md
+          git commit -m "sync: 同步上游 IPQuality $VERSION
+
+          上游变更: $UPSTREAM_COMMIT
+          脚本版本: $VERSION
+          自动检测时间: $DATE"
+          
+          # 推送（会触发 CI 构建）
+          git push
+          
+          echo "✅ Synced and pushed! CI will rebuild automatically."
+
+      - name: Create sync summary
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          echo "## 🔄 Upstream Sync Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Upstream Version**: ${{ steps.check.outputs.upstream_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Local Hash**: \`${{ steps.check.outputs.local_hash }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Upstream Hash**: \`${{ steps.check.outputs.upstream_hash }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Action**: Auto-synced and triggered CI rebuild" >> $GITHUB_STEP_SUMMARY
+
+      - name: No changes summary
+        if: steps.check.outputs.changed == 'false'
+        run: |
+          echo "## ✅ No Changes" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Upstream IPQuality script is up to date." >> $GITHUB_STEP_SUMMARY
