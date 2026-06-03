@@ -34,7 +34,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -77,9 +76,6 @@ jobs:
             - **macOS**: 下载 `.dmg` 文件
             - **Linux**: 下载 `.AppImage` 或 `.deb` 文件
             - **Android**: 下载 `.apk` 文件（见 Android 构建 Job）
-            
-            ### 更新内容
-            - 详见 [CHANGELOG](https://github.com/kellyson520/ip-quality-checker/blob/main/CHANGELOG.md)
           releaseDraft: true
           prerelease: false
           args: --target ${{ matrix.target }}
@@ -93,7 +89,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -101,8 +96,13 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Setup Android SDK
+      - name: Install Android SDK & NDK
         uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: |
+          sdkmanager --install "ndk;27.0.12077973"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> $GITHUB_ENV
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -125,10 +125,11 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2"
 
+      - name: Init Android project
+        run: cargo tauri android init
+
       - name: Build Android APK
         run: cargo tauri android build --apk
-        env:
-          NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
