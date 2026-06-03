@@ -180,6 +180,63 @@ jobs:
           rm -rf src-tauri/gen/android
           cargo tauri android init
 
+      - name: Configure APK signing
+        shell: bash
+        run: |
+          # Generate a keystore for signing
+          keytool -genkeypair \
+            -alias ipquality \
+            -keypass android123 \
+            -storepass android123 \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 36500 \
+            -dname "CN=IP Quality Checker, OU=Dev, O=IPQuality, L=Unknown, ST=Unknown, C=US" \
+            -keystore /tmp/release-keystore.jks
+
+          # Patch build.gradle.kts with Python for reliability
+          python3 << 'PYEOF'
+          import re, os
+
+          gradle_file = "src-tauri/gen/android/app/build.gradle.kts"
+          if not os.path.exists(gradle_file):
+              print(f"⚠️ {gradle_file} not found")
+              exit(0)
+
+          with open(gradle_file, "r") as f:
+              content = f.read()
+
+          # Add signingConfigs before buildTypes
+          signing_block = '''
+          signingConfigs {
+              create("release") {
+                  storeFile = file("/tmp/release-keystore.jks")
+                  storePassword = "android123"
+                  keyAlias = "ipquality"
+                  keyPassword = "android123"
+              }
+          }
+
+          '''
+
+          if "signingConfigs" not in content:
+              content = content.replace("buildTypes {", signing_block + "buildTypes {")
+              print("✅ Added signingConfigs block")
+
+          # Add signingConfig to release buildType
+          if "signingConfig = signingConfigs" not in content:
+              content = content.replace(
+                  "isMinifyEnabled",
+                  'signingConfig = signingConfigs.getByName("release")\n            isMinifyEnabled'
+              )
+              print("✅ Added signingConfig to release buildType")
+
+          with open(gradle_file, "w") as f:
+              f.write(content)
+
+          print("✅ APK signing configured")
+          PYEOF
+
       - name: Build Android APK
         run: cargo tauri android build --apk
 
