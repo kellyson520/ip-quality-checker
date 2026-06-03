@@ -3,7 +3,6 @@ name: CI Build
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -112,27 +111,6 @@ jobs:
           name: ${{ env.APP_NAME }}-${{ matrix.label }}-${{ matrix.arch }}-${{ steps.date.outputs.stamp }}
           path: ${{ env.APP_NAME }}-${{ matrix.label }}-*
 
-      - name: Release desktop assets
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          fail_on_unmatched_files: true
-          draft: true
-          name: "IP Quality Checker ${{ github.ref_name }}"
-          body: |
-            ## IP Quality Checker ${{ github.ref_name }}
-
-            ### 下载说明
-            | 平台 | 文件 |
-            |------|------|
-            | Windows | `.msi` (安装包) / `.exe` (NSIS) |
-            | macOS | `.dmg` |
-            | Linux | `.AppImage` (免安装) / `.deb` (Debian系) |
-            | Android | `.apk` |
-          files: ${{ env.APP_NAME }}-${{ matrix.label }}-*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   build-android:
     runs-on: ubuntu-22.04
     steps:
@@ -233,11 +211,61 @@ jobs:
           name: ${{ env.APP_NAME }}-android-${{ steps.date.outputs.stamp }}
           path: apks/*.apk
 
-      - name: Release Android APK
-        if: startsWith(github.ref, 'refs/tags/v')
+  release:
+    needs: [build-desktop, build-android]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get date
+        id: date
+        shell: bash
+        run: echo "stamp=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Get version from tauri.conf.json
+        id: ver
+        shell: bash
+        run: |
+          VER=$(python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
+          echo "ver=$VER" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          pattern: ${{ env.APP_NAME }}-*
+
+      - name: List downloaded artifacts
+        shell: bash
+        run: |
+          echo "=== Downloaded artifacts ==="
+          find artifacts/ -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.apk" \) | sort
+          echo "==========================="
+
+      - name: Create or update release
         uses: softprops/action-gh-release@v2
         with:
-          fail_on_unmatched_files: false
-          files: apks/*.apk
+          tag_name: v${{ steps.ver.outputs.ver }}-${{ steps.date.outputs.stamp }}
+          name: "IP Quality Checker v${{ steps.ver.outputs.ver }} (${{ steps.date.outputs.stamp }})"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## 🚀 IP Quality Checker v${{ steps.ver.outputs.ver }}
+
+            **构建日期**: ${{ steps.date.outputs.stamp }}
+
+            ### 📦 下载
+            | 平台 | 文件 |
+            |------|------|
+            | 🪟 Windows | `.msi` (安装包) / `.exe` (NSIS) |
+            | 🍎 macOS | `.dmg` |
+            | 🐧 Linux | `.AppImage` (免安装) / `.deb` (Debian系) |
+            | 📱 Android | `.apk` |
+
+            ### 🔄 自动同步
+            上游仓库 [xykt/IPQuality](https://github.com/xykt/IPQuality) 变更将自动触发重新构建和发布。
+          files: artifacts/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
