@@ -86,10 +86,11 @@ jobs:
 
       - name: Collect & rename artifacts
         id: collect
+        shell: bash
         run: |
           ARTIFACTS=""
-          for f in src-tauri/target/${{ matrix.target }}/release/bundle/*/* \
-                   src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi \
+          shopt -s nullglob
+          for f in src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi \
                    src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe \
                    src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg \
                    src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb \
@@ -98,7 +99,8 @@ jobs:
             EXT="${f##*.}"
             NEW="${{ env.APP_NAME }}-${{ matrix.label }}-${{ matrix.arch }}-${{ steps.date.outputs.stamp }}.${EXT}"
             cp "$f" "$NEW"
-            echo "  $NEW  ($(du -h "$NEW" | cut -f1))"
+            SIZE=$(du -h "$NEW" 2>/dev/null | cut -f1 || echo "?")
+            echo "  $NEW  ($SIZE)"
             ARTIFACTS="$ARTIFACTS $NEW"
           done
           echo "files=$ARTIFACTS" >> $GITHUB_OUTPUT
