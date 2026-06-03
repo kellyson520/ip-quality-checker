@@ -187,8 +187,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-            src-tauri/gen/android/.gradle
-          key: gradle-${{ hashFiles('src-tauri/gen/android/**/*.gradle*', 'src-tauri/gen/android/gradle.lockfile') }}
+          key: gradle-${{ hashFiles('src-tauri/gen/android/**/*.gradle*') }}
           restore-keys: |
             gradle-
 
@@ -199,7 +198,9 @@ jobs:
         run: cargo install tauri-cli --version "^2" --force
 
       - name: Init Android project
-        run: cargo tauri android init
+        run: |
+          rm -rf src-tauri/gen/android
+          cargo tauri android init
 
       - name: Build Android APK
         run: cargo tauri android build --apk
