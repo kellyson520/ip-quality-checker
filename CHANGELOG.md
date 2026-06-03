@@ -2,6 +2,11 @@
 
 ## [0.1.0] - 2026-06-03
 
+### Changed
+- ⚡ CI 构建缓存优化（npm / Cargo / Gradle 三级缓存）
+- 📦 构件命名规范：`IP-Quality-Checker-{platform}-{arch}-{YYYYMMDD}.{ext}`
+- 🚀 Release 统一命名，桌面端和 Android 合并发布
+
 ### Added
 - 🎉 初始版本发布
 - 🖥️ Tauri v2 跨平台框架搭建
