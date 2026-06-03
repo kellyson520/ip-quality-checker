@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #334155 #0f172a;
+  }
+  *::-webkit-scrollbar {
+    width: 6px;
+  }
+  *::-webkit-scrollbar-track {
+    background: #0f172a;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: #334155;
+    border-radius: 3px;
+  }
+  body {
+    @apply bg-[#0f172a] text-gray-200 font-sans antialiased;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-[#1e293b] border border-slate-700/50 rounded-xl p-5 transition-all duration-300 hover:border-slate-600/70 hover:shadow-lg hover:shadow-black/20;
+  }
+  .badge-good {
+    @apply bg-emerald-500/20 text-emerald-400 border border-emerald-500/30;
+  }
+  .badge-warn {
+    @apply bg-amber-500/20 text-amber-400 border border-amber-500/30;
+  }
+  .badge-bad {
+    @apply bg-red-500/20 text-red-400 border border-red-500/30;
+  }
+  .badge-neutral {
+    @apply bg-slate-500/20 text-slate-400 border border-slate-500/30;
+  }
+  .gradient-text {
+    @apply bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent;
+  }
+  .btn-primary {
+    @apply bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-300 hover:from-blue-400 hover:to-cyan-400 hover:shadow-lg hover:shadow-blue-500/25 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+  }
+}
+
+@layer utilities {
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.3); }
+    50% { box-shadow: 0 0 40px rgba(59, 130, 246, 0.6); }
+  }
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade-in {
+    animation: fade-in 0.5s ease-out forwards;
+  }
+  @keyframes spin-slow {
+    to { transform: rotate(360deg); }
+  }
+  .animate-spin-slow {
+    animation: spin-slow 3s linear infinite;
+  }
+}
