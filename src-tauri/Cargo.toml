@@ -4,6 +4,10 @@ version = "0.1.0"
 description = "IP Quality Checker - Tauri v2 App"
 edition = "2021"
 
+[package.metadata.android]
+min_sdk_version = 24
+target_sdk_version = 34
+
 [lib]
 name = "app_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
