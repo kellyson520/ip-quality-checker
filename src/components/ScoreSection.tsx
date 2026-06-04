@@ -21,6 +21,12 @@ function getLabel(score: number): string {
   return '极高';
 }
 
+function getScoreColor(score: number): string {
+  if (score <= 20) return '#4ade80';
+  if (score <= 50) return '#fbbf24';
+  return '#f87171';
+}
+
 function ScoreRow({ label, value }: { label: string; value: ScoreValue }) {
   const num = toScore(value);
   if (num === null) return null;
@@ -44,6 +50,11 @@ export default function ScoreSection({ score }: { score: IPReport['Score'] }) {
   const entries = Object.entries(score);
   const totalEntry = entries.find(([k]) => k.toLowerCase().includes('total'));
   const totalScore = totalEntry ? toScore(totalEntry[1]) : null;
+  const ringSize = 120;
+  const ringStroke = 10;
+  const ringRadius = (ringSize - ringStroke) / 2;
+  const ringCircumference = 2 * Math.PI * ringRadius;
+  const ringOffset = totalScore === null ? ringCircumference : ringCircumference * (1 - totalScore / 100);
 
   return (
     <div className="section p-4">
@@ -51,12 +62,49 @@ export default function ScoreSection({ score }: { score: IPReport['Score'] }) {
 
       {totalScore !== null && (
         <div className="flex items-center gap-4 mb-4">
-          <span className={`text-3xl font-semibold ${
-            totalScore <= 20 ? 'text-[#4ade80]' : totalScore <= 50 ? 'text-[#fbbf24]' : 'text-[#f87171]'
-          }`}>
-            {totalScore}
-          </span>
-          <span className="text-[13px] text-[#666]">{getLabel(totalScore)}风险</span>
+          <div className="relative h-20 w-20 shrink-0">
+            <svg
+              viewBox={`0 0 ${ringSize} ${ringSize}`}
+              className="h-full w-full -rotate-90"
+              aria-hidden="true"
+            >
+              <circle
+                cx={ringSize / 2}
+                cy={ringSize / 2}
+                r={ringRadius}
+                fill="none"
+                stroke="#2a2a2a"
+                strokeWidth={ringStroke}
+              />
+              <circle
+                cx={ringSize / 2}
+                cy={ringSize / 2}
+                r={ringRadius}
+                fill="none"
+                stroke={getScoreColor(totalScore)}
+                strokeWidth={ringStroke}
+                strokeLinecap="round"
+                strokeDasharray={ringCircumference}
+                strokeDashoffset={ringOffset}
+                className="transition-[stroke-dashoffset,stroke] duration-700 ease-out"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span
+                className="text-2xl font-semibold leading-none"
+                style={{ color: getScoreColor(totalScore) }}
+              >
+                {totalScore}
+              </span>
+              <span className="mt-0.5 text-[10px] text-[#8a8a8a]">总分</span>
+            </div>
+          </div>
+          <div className="min-w-0">
+            <div className="text-[13px] text-[#666]">{getLabel(totalScore)}风险</div>
+            <div className="mt-1 text-[12px] text-[#444]">
+              评分越高，风险越大
+            </div>
+          </div>
         </div>
       )}
 

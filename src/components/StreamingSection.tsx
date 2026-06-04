@@ -34,7 +34,10 @@ function RegionBadge({ region }: { region?: Scalar }) {
   const text = displayValue(region);
   if (!text || text === 'null') return null;
   return (
-    <span className="text-[10px] text-[#666] ml-1 truncate max-w-[80px]" title={text}>
+    <span
+      className="ml-1 inline-flex items-center rounded-full border border-[#2f2f2f] bg-[#1a1a1a] px-1.5 py-0.5 text-[10px] font-medium leading-none text-[#9a9a9a] max-w-[96px] truncate align-middle"
+      title={text}
+    >
       {text}
     </span>
   );
