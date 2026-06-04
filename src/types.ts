@@ -9,7 +9,15 @@ export interface IPReport {
     Organization: string;
     Latitude: string;
     Longitude: string;
-    City: { Name: string };
+    DMS?: string;
+    Map?: string;
+    TimeZone: string;
+    City: {
+      Name: string;
+      PostalCode?: string;
+      SubCode?: string;
+      Subdivisions?: string;
+    };
     Region: { Code: string; Name: string };
     Continent: { Code: string; Name: string };
     RegisteredRegion?: { Code: string; Name: string };

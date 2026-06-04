@@ -23,6 +23,15 @@ function Badge({ status }: { status: string }) {
   return <span className="badge badge-gray">{status.trim()}</span>;
 }
 
+function RegionBadge({ region }: { region?: string }) {
+  if (!region || region === 'null') return null;
+  return (
+    <span className="text-[10px] text-[#666] ml-1 truncate max-w-[80px]" title={region}>
+      {region}
+    </span>
+  );
+}
+
 export default function StreamingSection({ media }: { media: IPReport['Media'] }) {
   const entries = Object.entries(media || {});
   if (entries.length === 0) return null;
@@ -34,7 +43,10 @@ export default function StreamingSection({ media }: { media: IPReport['Media'] }
       <div className="space-y-1 sm:space-y-0 sm:grid sm:grid-cols-2 md:grid-cols-4 sm:gap-2">
         {entries.map(([key, val]) => (
           <div key={key} className="flex items-center justify-between py-1.5 sm:py-1.5 sm:px-3 sm:rounded sm:bg-[#1f1f1f]">
-            <span className="text-[13px] text-[#ccc]">{SERVICES[key] || key}</span>
+            <div className="flex items-center min-w-0">
+              <span className="text-[13px] text-[#ccc]">{SERVICES[key] || key}</span>
+              <RegionBadge region={val.Region} />
+            </div>
             <Badge status={val.Status} />
           </div>
         ))}

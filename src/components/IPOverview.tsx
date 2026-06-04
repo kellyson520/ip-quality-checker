@@ -16,6 +16,7 @@ export default function IPOverview({ head, info, type }: Props) {
     ['组织', info.Organization],
     ['位置', location || '-'],
     ['坐标', `${info.Latitude}, ${info.Longitude}`],
+    ['时区', info.TimeZone || '-'],
     ['类型', usage],
   ];
 

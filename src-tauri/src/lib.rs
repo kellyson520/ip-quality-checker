@@ -407,6 +407,7 @@ async fn run_ip_check() -> Result<String, String> {
 
     // ipapi
     let ipapi_country = jstr(&ipapi, &["location", "country_code"]);
+    let ipapi_score = jf64(&ipapi, &["fraud_score"]);
     let ipapi_proxy = jbool(&ipapi, &["is_proxy"]);
     let ipapi_vpn = jbool(&ipapi, &["is_vpn"]);
     let ipapi_tor = jbool(&ipapi, &["is_tor"]);
@@ -419,6 +420,7 @@ async fn run_ip_check() -> Result<String, String> {
     // ip2location
     let ip2l_country = jstr(&ip2l, &["country_code"]);
     let ip2l_usage = jstr(&ip2l, &["usage_type"]);
+    let ip2l_score = jf64(&ip2l, &["fraud_score"]);
 
     // ipdata
     let ipdata_country = jstr(&ipdata, &["country_code"]);
@@ -489,16 +491,24 @@ async fn run_ip_check() -> Result<String, String> {
         },
         "Score": {
             "Total": format!("{}", total_score),
+            "IP2LOCATION": format!("{}", ip2l_score as u32),
             "SCAMALYTICS": format!("{}", scam_score as u32),
-            "AbuseIPDB": format!("{}", abuse_score as u32)
+            "ipapi": format!("{}", ipapi_score as u32),
+            "AbuseIPDB": format!("{}", abuse_score as u32),
+            "IPQS": "null".to_string(),
+            "DBIP": "null".to_string()
         },
         "Factor": {
             "CountryCode": {
-                "maxmind": true,
-                "ipregistry": reg_country != "null" && !reg_country.is_empty(),
+                "IP2LOCATION": ip2l_country != "null" && !ip2l_country.is_empty(),
                 "ipapi": ipapi_country != "null" && !ipapi_country.is_empty(),
+                "ipregistry": reg_country != "null" && !reg_country.is_empty(),
+                "IPQS": false,
+                "SCAMALYTICS": scam_country != "null" && !scam_country.is_empty(),
                 "ipdata": ipdata_country != "null" && !ipdata_country.is_empty(),
-                "IPinfo": iio_country != "null" && !iio_country.is_empty()
+                "IPinfo": iio_country != "null" && !iio_country.is_empty(),
+                "IPWHOIS": false,
+                "DBIP": false
             },
             "Proxy": {
                 "scamalytics": scam_is_proxy,
@@ -540,13 +550,13 @@ async fn run_ip_check() -> Result<String, String> {
             }
         },
         "Media": {
-            "TikTok": { "Status": yn(tt) },
-            "DisneyPlus": { "Status": yn(dp) },
-            "Netflix": { "Status": yn(nf) },
-            "Youtube": { "Status": yn(yt) },
-            "AmazonPrimeVideo": { "Status": yn(am) },
-            "Reddit": { "Status": yn(rd) },
-            "ChatGPT": { "Status": yn(gp) }
+            "TikTok": { "Status": yn(tt), "Region": "null", "Type": "null" },
+            "DisneyPlus": { "Status": yn(dp), "Region": "null", "Type": "null" },
+            "Netflix": { "Status": yn(nf), "Region": "null", "Type": "null" },
+            "Youtube": { "Status": yn(yt), "Region": "null", "Type": "null" },
+            "AmazonPrimeVideo": { "Status": yn(am), "Region": "null", "Type": "null" },
+            "Reddit": { "Status": yn(rd), "Region": "null", "Type": "null" },
+            "ChatGPT": { "Status": yn(gp), "Region": "null", "Type": "null" }
         },
         "Mail": {
             "Port25": null,
