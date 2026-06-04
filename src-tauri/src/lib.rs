@@ -311,7 +311,8 @@ async fn run_ip_check() -> Result<String, String> {
     let abuse = abuse_r.unwrap_or(serde_json::json!({}));
 
     // Step 5: Check streaming services concurrently
-    let (nf, dp, yt, am, rd, gp) = tokio::join!(
+    let (tt, nf, dp, yt, am, rd, gp) = tokio::join!(
+        check_http_status("https://www.tiktok.com/"),
         check_http_status("https://www.netflix.com/title/81280792"),
         check_http_status("https://www.disneyplus.com/"),
         check_http_status("https://www.youtube.com/"),
@@ -380,11 +381,34 @@ async fn run_ip_check() -> Result<String, String> {
         .and_then(|v| v.as_str())
         .unwrap_or("null")
         .to_string();
+    // Robot: combine spambot + operamini + semrush
+    let scam_robot1 = scam
+        .pointer("/external_datasources/x4bnet/is_blacklisted_spambot")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let scam_robot2 = scam
+        .pointer("/external_datasources/x4bnet/is_bot_operamini")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let scam_robot3 = scam
+        .pointer("/external_datasources/x4bnet/is_bot_semrush")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let scam_is_robot = scam_robot1 || scam_robot2 || scam_robot3;
 
     // AbuseIPDB: nested under .data.*
     let abuse_score = jf64(&abuse, &["data", "abuseConfidenceScore"]);
     let abuse_usage = jstr(&abuse, &["data", "usageType"]);
     let abuse_is_tor = jbool(&abuse, &["data", "isTor"]);
+
+    // Calculate total score (weighted average of available sources)
+    let total_score = {
+        let mut total = 0.0;
+        let mut count = 0u32;
+        if scam_score > 0.0 { total += scam_score; count += 1; }
+        if abuse_score > 0.0 { total += abuse_score; count += 1; }
+        if count > 0 { (total / count as f64) as u32 } else { 0 }
+    };
 
     // Build JSON matching bash script output structure exactly
     let result = serde_json::json!({
@@ -416,6 +440,7 @@ async fn run_ip_check() -> Result<String, String> {
             }
         },
         "Score": {
+            "Total": format!("{}", total_score),
             "SCAMALYTICS": format!("{}", scam_score as u32),
             "AbuseIPDB": format!("{}", abuse_score as u32)
         },
@@ -434,12 +459,18 @@ async fn run_ip_check() -> Result<String, String> {
             "VPN": {
                 "scamalytics": scam_is_vpn
             },
+            "Server": {
+                "scamalytics": scam_is_dc
+            },
             "Abuser": {
                 "scamalytics": scam_is_blacklisted
+            },
+            "Robot": {
+                "scamalytics": scam_is_robot
             }
         },
         "Media": {
-            "TikTok": { "Status": "Block" },
+            "TikTok": { "Status": yn(tt) },
             "DisneyPlus": { "Status": yn(dp) },
             "Netflix": { "Status": yn(nf) },
             "Youtube": { "Status": yn(yt) },

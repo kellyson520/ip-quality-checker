@@ -28,12 +28,19 @@ function FactorRow({ label, sources }: { label: string; sources: Record<string, 
   );
 }
 
+function toRecord(v: unknown): Record<string, BoolVal> {
+  if (v && typeof v === 'object' && !Array.isArray(v)) return v as Record<string, BoolVal>;
+  return {};
+}
+
 export default function FactorSection({ factor }: { factor: IPReport['Factor'] }) {
   const sections: [string, Record<string, BoolVal>][] = [
-    ['代理', Object.fromEntries(Object.entries(factor.Proxy || {}))],
-    ['Tor', Object.fromEntries(Object.entries(factor.Tor || {}))],
-    ['VPN', Object.fromEntries(Object.entries(factor.VPN || {}))],
-    ['滥用', Object.fromEntries(Object.entries(factor.Abuser || {}))],
+    ['代理', toRecord(factor.Proxy)],
+    ['Tor', toRecord(factor.Tor)],
+    ['VPN', toRecord(factor.VPN)],
+    ['服务器', toRecord(factor.Server)],
+    ['滥用', toRecord(factor.Abuser)],
+    ['机器人', toRecord(factor.Robot)],
   ];
 
   const hasData = sections.some(([, data]) => Object.keys(data).length > 0);
