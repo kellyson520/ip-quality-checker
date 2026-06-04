@@ -27,6 +27,18 @@ function getScoreColor(score: number): string {
   return '#f87171';
 }
 
+function getDisplayName(key: string): string {
+  const displayNames: Record<string, string> = {
+    SCAMALYTICS: 'Scamalytics',
+    AbuseIPDB: 'AbuseIPDB',
+    IP2LOCATION: 'IP2Location',
+    ipapi: 'IPAPI',
+    Total: '总分',
+  };
+
+  return displayNames[key] ?? key;
+}
+
 function ScoreRow({ label, value }: { label: string; value: ScoreValue }) {
   const num = toScore(value);
   if (num === null) return null;
@@ -112,7 +124,7 @@ export default function ScoreSection({ score }: { score: IPReport['Score'] }) {
         {entries
           .filter(([k]) => k !== (totalEntry?.[0] || ''))
           .map(([key, val]) => (
-            <ScoreRow key={key} label={key} value={val} />
+            <ScoreRow key={key} label={getDisplayName(key)} value={val} />
           ))}
       </div>
     </div>
