@@ -1,20 +1,7 @@
 import type { IPReport, RiskFlag } from '../types';
+import { normalizeRiskFlag } from '../report';
 
 type NormalizedFlag = boolean | null;
-
-function normalizeFlag(value: RiskFlag): NormalizedFlag {
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'number') return value > 0;
-  if (typeof value !== 'string') return null;
-
-  const normalized = value.trim().toLowerCase();
-  if (!normalized || normalized === 'null' || normalized === 'unknown' || normalized === 'n/a') {
-    return null;
-  }
-  if (['true', 'yes', 'y', '1', 'risk', 'blocked', 'block'].includes(normalized)) return true;
-  if (['false', 'no', 'n', '0', 'clean', 'ok'].includes(normalized)) return false;
-  return null;
-}
 
 function StatusDot({ value }: { value: NormalizedFlag }) {
   if (value === true) return <span className="w-1.5 h-1.5 rounded-full bg-[#f87171] shrink-0" />;
@@ -36,7 +23,7 @@ function FactorRow({ label, sources }: { label: string; sources: Record<string, 
               className="flex h-5 min-w-0 items-center gap-1"
               title={`${key}: ${String(val ?? '-')}`}
             >
-              <StatusDot value={normalizeFlag(val)} />
+              <StatusDot value={normalizeRiskFlag(val)} />
               <span className="truncate text-[10px] text-[#555] sm:text-[11px]">{key}</span>
             </div>
           ))}

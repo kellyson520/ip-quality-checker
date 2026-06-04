@@ -1,11 +1,5 @@
 import type { IPReport, ScoreValue } from '../types';
-
-function toScore(value: ScoreValue): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const num = Number(value);
-  if (!Number.isFinite(num)) return null;
-  return Math.min(100, Math.max(0, Math.round(num)));
-}
+import { scoreToNumber } from '../report';
 
 function getBarColor(score: number): string {
   if (score <= 20) return 'bg-[#4ade80]';
@@ -40,7 +34,7 @@ function getDisplayName(key: string): string {
 }
 
 function ScoreRow({ label, value }: { label: string; value: ScoreValue }) {
-  const num = toScore(value);
+  const num = scoreToNumber(value);
   if (num === null) return null;
   return (
     <div className="space-y-1.5">
@@ -61,7 +55,7 @@ function ScoreRow({ label, value }: { label: string; value: ScoreValue }) {
 export default function ScoreSection({ score }: { score: IPReport['Score'] }) {
   const entries = Object.entries(score);
   const totalEntry = entries.find(([k]) => k.toLowerCase().includes('total'));
-  const totalScore = totalEntry ? toScore(totalEntry[1]) : null;
+  const totalScore = totalEntry ? scoreToNumber(totalEntry[1]) : null;
   const showTotalRing = totalScore !== null && totalScore > 0;
   const ringSize = 120;
   const ringStroke = 10;

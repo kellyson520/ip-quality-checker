@@ -5,6 +5,8 @@ export type RiskFlag = boolean | string | number | null | undefined;
 export interface IPReport {
   Head: {
     IP: string;
+    Command?: string;
+    GitHub?: string;
     Time: string;
     Version: string;
   };

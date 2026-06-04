@@ -275,6 +275,15 @@ const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 const RAW_GITHUB: &str = "https://testingcf.jsdelivr.net/gh/xykt/IPQuality@main/";
 
 #[cfg(mobile)]
+const IPQUALITY_COMMAND: &str = "bash <(curl -sL https://Check.Place) -EI";
+
+#[cfg(mobile)]
+const IPQUALITY_GITHUB: &str = "https://github.com/xykt/IPQuality";
+
+#[cfg(mobile)]
+const IPQUALITY_VERSION: &str = "v2026-03-13";
+
+#[cfg(mobile)]
 fn empty_string() -> Value {
     Value::String(String::new())
 }
@@ -439,7 +448,10 @@ async fn fetch_maxmind(ip: &str) -> Value {
     let fallback2_url = format!("https://ipapi.co/{}/json/", ip);
     match fetch_json(&fallback2_url).await {
         Ok(data) if !data.is_null() && data.is_object() => {
-            eprintln!("[maxmind] ipapi.co OK: city={}", data["city"].as_str().unwrap_or("?"));
+            eprintln!(
+                "[maxmind] ipapi.co OK: city={}",
+                data["city"].as_str().unwrap_or("?")
+            );
             let asn_str = data["asn"].as_str().unwrap_or("");
             let asn_num = asn_str.replace("AS", "").parse::<u64>().unwrap_or(0);
             serde_json::json!({
@@ -1757,7 +1769,6 @@ async fn run_ip_check() -> Result<String, String> {
     // ip2location
     let ip2l_country = opt_str(&ip2l, &["country_code"]);
     let ip2l_usage = opt_str(&ip2l, &["usage_type"]);
-    let ip2l_company_type = opt_str(&ip2l, &["as_info", "as_usage_type"]);
     let ip2l_score = opt_f64(&ip2l, &["fraud_score"]);
     let ip2l_proxy = match (
         opt_bool(&ip2l, &["is_proxy"]),
@@ -1822,17 +1833,16 @@ async fn run_ip_check() -> Result<String, String> {
     let company_map = serde_json::json!({
         "IPinfo": classify_standard_type(iio_company_type),
         "ipregistry": classify_standard_type(reg_company_type),
-        "ipapi": classify_standard_type(ipapi_company_type),
-        "IP2LOCATION": classify_ip2location_usage(ip2l_company_type)
+        "ipapi": classify_standard_type(ipapi_company_type)
     });
 
     let result = serde_json::json!({
         "Head": {
             "IP": ip,
-            "Command": Value::Null,
-            "GitHub": Value::Null,
+            "Command": IPQUALITY_COMMAND,
+            "GitHub": IPQUALITY_GITHUB,
             "Time": chrono_now(),
-            "Version": "mobile-native"
+            "Version": IPQUALITY_VERSION
         },
         "Info": {
             "ASN": asn,
@@ -1935,6 +1945,7 @@ async fn run_ip_check() -> Result<String, String> {
             "Robot": {
                 "IP2LOCATION": bool_or_null(ip2l_robot),
                 "ipapi": bool_or_null(ipapi_crawler),
+                "ipregistry": Value::Null,
                 "IPQS": ipqs_robot,
                 "SCAMALYTICS": scam_robot,
                 "ipdata": Value::Null,

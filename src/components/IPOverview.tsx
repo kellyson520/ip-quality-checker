@@ -1,4 +1,5 @@
 import type { IPReport } from '../types';
+import { cleanScalar } from '../report';
 
 interface Props {
   head: IPReport['Head'];
@@ -7,32 +8,26 @@ interface Props {
 }
 
 export default function IPOverview({ head, info, type }: Props) {
-  const cleanValue = (value: unknown): string | null => {
-    if (value === null || value === undefined) return null;
-    const text = String(value).trim();
-    return text && text.toLowerCase() !== 'null' ? text : null;
-  };
-
-  const location = [info.City?.Name, info.Region?.Name].map(cleanValue).filter(Boolean).join(', ');
-  const usageValues = Object.values(type.Usage || {}).map(cleanValue).filter(Boolean);
-  const infoType = cleanValue(info.Type);
+  const location = [info.City?.Name, info.Region?.Name].map(cleanScalar).filter(Boolean).join(', ');
+  const usageValues = Object.values(type.Usage || {}).map(cleanScalar).filter(Boolean);
+  const infoType = cleanScalar(info.Type);
   const usage = usageValues.join(', ') || infoType || '-';
   const infoTypeBadgeClass = infoType?.includes('本土')
     ? 'badge badge-green'
     : infoType?.includes('海外')
       ? 'badge badge-amber'
       : 'badge badge-gray';
-  const latitude = cleanValue(info.Latitude);
-  const longitude = cleanValue(info.Longitude);
+  const latitude = cleanScalar(info.Latitude);
+  const longitude = cleanScalar(info.Longitude);
   const coordinates = latitude && longitude ? `${latitude}, ${longitude}` : '-';
 
   const rows: [string, string][] = [
     ['IP', head.IP],
-    ['ASN', cleanValue(info.ASN) || '-'],
-    ['组织', cleanValue(info.Organization) || '-'],
+    ['ASN', cleanScalar(info.ASN) || '-'],
+    ['组织', cleanScalar(info.Organization) || '-'],
     ['位置', location || '-'],
     ['坐标', coordinates],
-    ['时区', cleanValue(info.TimeZone) || '-'],
+    ['时区', cleanScalar(info.TimeZone) || '-'],
     ['类型', usage],
   ];
 

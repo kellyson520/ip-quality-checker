@@ -1,4 +1,5 @@
 import type { IPReport, Scalar } from '../types';
+import { cleanScalar } from '../report';
 
 const SERVICES: Record<string, string> = {
   TikTok: 'TikTok',
@@ -12,8 +13,7 @@ const SERVICES: Record<string, string> = {
 };
 
 function displayValue(value: Scalar): string {
-  if (value === null || value === undefined) return '';
-  return String(value).trim();
+  return cleanScalar(value) ?? '';
 }
 
 function Badge({ status }: { status: Scalar }) {

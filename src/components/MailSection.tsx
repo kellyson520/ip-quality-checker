@@ -1,30 +1,17 @@
 import type { IPReport, RiskFlag } from '../types';
+import { normalizePassFlag } from '../report';
 
 const MAIL_SERVICES = ['Gmail', 'Outlook', 'Yahoo', 'Apple', 'QQ', 'MailRU', 'AOL', 'GMX', 'MailCOM', '163', 'Sohu', 'Sina'];
 
-function normalizePass(value: RiskFlag): boolean | null {
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'number') return value > 0;
-  if (typeof value !== 'string') return null;
-
-  const normalized = value.trim().toLowerCase();
-  if (!normalized || normalized === 'null' || normalized === 'unknown' || normalized === 'n/a') {
-    return null;
-  }
-  if (['true', 'yes', 'y', '1', 'ok', 'pass', 'passed', 'open'].includes(normalized)) return true;
-  if (['false', 'no', 'n', '0', 'fail', 'failed', 'blocked', 'closed'].includes(normalized)) return false;
-  return null;
-}
-
 function StatusDot({ value }: { value: RiskFlag }) {
-  const normalized = normalizePass(value);
+  const normalized = normalizePassFlag(value);
   if (normalized === true) return <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80] shrink-0" />;
   if (normalized === false) return <span className="w-1.5 h-1.5 rounded-full bg-[#f87171] shrink-0" />;
   return <span className="w-1.5 h-1.5 rounded-full bg-[#444] shrink-0" />;
 }
 
 function StatusText({ value }: { value: RiskFlag }) {
-  const normalized = normalizePass(value);
+  const normalized = normalizePassFlag(value);
   if (normalized === true) return <span className="text-[13px] text-[#4ade80]">通过</span>;
   if (normalized === false) return <span className="text-[13px] text-[#f87171]">拒绝</span>;
   return <span className="text-[13px] text-[#444]">-</span>;

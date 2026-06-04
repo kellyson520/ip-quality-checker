@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { IPReport } from './types';
+import { getUserError, parseReport } from './report';
 import Header from './components/Header';
 import IPOverview from './components/IPOverview';
 import ScoreSection from './components/ScoreSection';
@@ -9,32 +10,6 @@ import StreamingSection from './components/StreamingSection';
 import MailSection from './components/MailSection';
 
 type AppStatus = 'idle' | 'loading' | 'done' | 'error';
-
-function parseReport(jsonStr: string): IPReport {
-  const parsed = JSON.parse(jsonStr) as Partial<IPReport>;
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error('INVALID_REPORT');
-  }
-  if (!parsed.Head?.IP || !parsed.Info || !parsed.Score || !parsed.Factor) {
-    throw new Error('INCOMPLETE_REPORT');
-  }
-  return parsed as IPReport;
-}
-
-function getUserError(err: unknown): string {
-  const msg = String(err);
-  if (msg.includes('INVALID_REPORT') || msg.includes('INCOMPLETE_REPORT') || msg.includes('JSON')) {
-    return '检测结果格式异常';
-  }
-  if (msg.includes('bash')) return '未找到运行环境';
-  if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('timed out')) {
-    return '检测超时，请稍后重试';
-  }
-  if (msg.includes('network') || msg.includes('connect') || msg.includes('Request failed')) {
-    return '网络连接失败';
-  }
-  return '检测失败，请稍后重试';
-}
 
 export default function App() {
   const [data, setData] = useState<IPReport | null>(null);
