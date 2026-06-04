@@ -8,14 +8,21 @@ interface Props {
 
 export default function IPOverview({ head, info, type }: Props) {
   const location = [info.City?.Name, info.Region?.Name].filter(Boolean).join(', ');
-  const usage = Object.values(type.Usage || {}).join(', ') || '-';
+  const usageValues = Object.values(type.Usage || {})
+    .filter((value) => value !== null && value !== undefined && value !== '' && value !== 'null')
+    .map(String);
+  const usage = usageValues.join(', ') || info.Type || '-';
+  const coordinates =
+    info.Latitude && info.Longitude && info.Latitude !== 'null' && info.Longitude !== 'null'
+      ? `${info.Latitude}, ${info.Longitude}`
+      : '-';
 
   const rows: [string, string][] = [
     ['IP', head.IP],
     ['ASN', info.ASN],
     ['组织', info.Organization],
     ['位置', location || '-'],
-    ['坐标', `${info.Latitude}, ${info.Longitude}`],
+    ['坐标', coordinates],
     ['时区', info.TimeZone || '-'],
     ['类型', usage],
   ];

@@ -10,25 +10,51 @@ import MailSection from './components/MailSection';
 
 type AppStatus = 'idle' | 'loading' | 'done' | 'error';
 
+function parseReport(jsonStr: string): IPReport {
+  const parsed = JSON.parse(jsonStr) as Partial<IPReport>;
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('INVALID_REPORT');
+  }
+  if (!parsed.Head?.IP || !parsed.Info || !parsed.Score || !parsed.Factor) {
+    throw new Error('INCOMPLETE_REPORT');
+  }
+  return parsed as IPReport;
+}
+
+function getUserError(err: unknown): string {
+  const msg = String(err);
+  if (msg.includes('INVALID_REPORT') || msg.includes('INCOMPLETE_REPORT') || msg.includes('JSON')) {
+    return '检测结果格式异常';
+  }
+  if (msg.includes('bash')) return '未找到运行环境';
+  if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('timed out')) {
+    return '检测超时，请稍后重试';
+  }
+  if (msg.includes('network') || msg.includes('connect') || msg.includes('Request failed')) {
+    return '网络连接失败';
+  }
+  return '检测失败，请稍后重试';
+}
+
 export default function App() {
   const [data, setData] = useState<IPReport | null>(null);
   const [status, setStatus] = useState<AppStatus>('idle');
   const [error, setError] = useState<string>('');
+  const [durationMs, setDurationMs] = useState<number | null>(null);
 
   const runCheck = useCallback(async () => {
     setStatus('loading');
     setError('');
+    setDurationMs(null);
+    const startedAt = performance.now();
     try {
       const jsonStr = await invoke<string>('run_ip_check');
-      const result: IPReport = JSON.parse(jsonStr);
+      const result = parseReport(jsonStr);
       setData(result);
+      setDurationMs(Math.round(performance.now() - startedAt));
       setStatus('done');
     } catch (err) {
-      const msg = String(err);
-      if (msg.includes('bash')) setError('未找到运行环境');
-      else if (msg.includes('timeout') || msg.includes('Timeout')) setError('检测超时');
-      else if (msg.includes('network') || msg.includes('connect')) setError('网络连接失败');
-      else setError('检测失败，请稍后重试');
+      setError(getUserError(err));
       setStatus('error');
     }
   }, []);
@@ -78,7 +104,13 @@ export default function App() {
       </main>
 
       <footer className="flex items-center justify-between px-3 sm:px-5 py-2.5 border-t border-[#2a2a2a] text-[10px] sm:text-[11px] text-[#444] max-w-[960px] w-full mx-auto">
-        <span>{status === 'done' ? '检测完成' : status === 'loading' ? '检测中...' : '就绪'}</span>
+        <span>
+          {status === 'done'
+            ? `检测完成${durationMs ? ` · ${(durationMs / 1000).toFixed(1)}s` : ''}`
+            : status === 'loading'
+              ? '检测中...'
+              : '就绪'}
+        </span>
         {data && <span className="truncate ml-2">{data.Head.Time}</span>}
       </footer>
     </div>

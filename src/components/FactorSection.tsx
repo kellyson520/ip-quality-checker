@@ -1,14 +1,28 @@
-import type { IPReport } from '../types';
+import type { IPReport, RiskFlag } from '../types';
 
-type BoolVal = boolean | null;
+type NormalizedFlag = boolean | null;
 
-function StatusDot({ value }: { value: BoolVal }) {
+function normalizeFlag(value: RiskFlag): NormalizedFlag {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value > 0;
+  if (typeof value !== 'string') return null;
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized === 'null' || normalized === 'unknown' || normalized === 'n/a') {
+    return null;
+  }
+  if (['true', 'yes', 'y', '1', 'risk', 'blocked', 'block'].includes(normalized)) return true;
+  if (['false', 'no', 'n', '0', 'clean', 'ok'].includes(normalized)) return false;
+  return null;
+}
+
+function StatusDot({ value }: { value: NormalizedFlag }) {
   if (value === true) return <span className="w-1.5 h-1.5 rounded-full bg-[#f87171] shrink-0" />;
   if (value === false) return <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80] shrink-0" />;
   return <span className="w-1.5 h-1.5 rounded-full bg-[#444] shrink-0" />;
 }
 
-function FactorRow({ label, sources }: { label: string; sources: Record<string, BoolVal> }) {
+function FactorRow({ label, sources }: { label: string; sources: Record<string, RiskFlag> }) {
   const entries = Object.entries(sources);
   if (entries.length === 0) return null;
   return (
@@ -17,8 +31,8 @@ function FactorRow({ label, sources }: { label: string; sources: Record<string, 
         <span className="data-label">{label}</span>
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 justify-end">
           {entries.map(([key, val]) => (
-            <div key={key} className="flex items-center gap-1">
-              <StatusDot value={val} />
+            <div key={key} className="flex items-center gap-1" title={`${key}: ${String(val ?? '-')}`}>
+              <StatusDot value={normalizeFlag(val)} />
               <span className="text-[10px] sm:text-[11px] text-[#555]">{key}</span>
             </div>
           ))}
@@ -28,13 +42,13 @@ function FactorRow({ label, sources }: { label: string; sources: Record<string, 
   );
 }
 
-function toRecord(v: unknown): Record<string, BoolVal> {
-  if (v && typeof v === 'object' && !Array.isArray(v)) return v as Record<string, BoolVal>;
+function toRecord(v: unknown): Record<string, RiskFlag> {
+  if (v && typeof v === 'object' && !Array.isArray(v)) return v as Record<string, RiskFlag>;
   return {};
 }
 
 export default function FactorSection({ factor }: { factor: IPReport['Factor'] }) {
-  const sections: [string, Record<string, BoolVal>][] = [
+  const sections: [string, Record<string, RiskFlag>][] = [
     ['代理', toRecord(factor.Proxy)],
     ['Tor', toRecord(factor.Tor)],
     ['VPN', toRecord(factor.VPN)],

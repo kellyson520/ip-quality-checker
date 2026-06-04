@@ -1,3 +1,7 @@
+export type Scalar = string | number | boolean | null | undefined;
+export type ScoreValue = string | number | null | undefined;
+export type RiskFlag = boolean | string | number | null | undefined;
+
 export interface IPReport {
   Head: {
     IP: string;
@@ -24,31 +28,35 @@ export interface IPReport {
     Type: string;
   };
   Type: {
-    Usage: Record<string, string>;
-    Company: Record<string, string>;
+    Usage?: Record<string, Scalar>;
+    Company?: Record<string, Scalar>;
+    Proxy?: RiskFlag;
+    VPN?: RiskFlag;
+    Tor?: RiskFlag;
   };
-  Score: Record<string, string>;
+  Score: Record<string, ScoreValue>;
   Factor: {
-    CountryCode: Record<string, boolean | string | null>;
-    Proxy: Record<string, boolean | null>;
-    Tor: Record<string, boolean | null>;
-    VPN: Record<string, boolean | null>;
-    Server?: Record<string, boolean | null>;
-    Abuser?: Record<string, boolean | null>;
-    Robot?: Record<string, boolean | null>;
+    CountryCode?: Record<string, RiskFlag>;
+    Proxy?: Record<string, RiskFlag>;
+    Tor?: Record<string, RiskFlag>;
+    VPN?: Record<string, RiskFlag>;
+    Server?: Record<string, RiskFlag>;
+    Abuser?: Record<string, RiskFlag>;
+    Robot?: Record<string, RiskFlag>;
   };
   Media: Record<string, {
-    Status: string;
-    Region?: string;
-    Type?: string;
+    Status?: Scalar;
+    Result?: Scalar;
+    Region?: Scalar;
+    Type?: Scalar;
   }>;
   Mail: {
-    Port25?: boolean | null;
+    Port25?: RiskFlag;
     DNSBlacklist?: {
-      Total?: number;
-      Clean?: number;
-      Marked?: number;
-      Blacklisted?: number;
+      Total?: number | null;
+      Clean?: number | null;
+      Marked?: number | null;
+      Blacklisted?: number | null;
     };
     [service: string]: unknown;
   };

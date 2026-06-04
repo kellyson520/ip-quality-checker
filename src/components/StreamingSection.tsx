@@ -1,7 +1,8 @@
-import type { IPReport } from '../types';
+import type { IPReport, Scalar } from '../types';
 
 const SERVICES: Record<string, string> = {
   TikTok: 'TikTok',
+  Bilibili: 'Bilibili',
   DisneyPlus: 'Disney+',
   Netflix: 'Netflix',
   Youtube: 'YouTube',
@@ -10,24 +11,31 @@ const SERVICES: Record<string, string> = {
   ChatGPT: 'ChatGPT',
 };
 
-function Badge({ status }: { status: string }) {
-  const s = status.trim().toLowerCase();
+function displayValue(value: Scalar): string {
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+}
+
+function Badge({ status }: { status: Scalar }) {
+  const text = displayValue(status);
+  const s = text.toLowerCase();
   if (!s || s === 'null' || s === 'nodata')
     return <span className="badge badge-gray">-</span>;
   if (s.includes('解锁') || s.includes('yes') || s.includes('ok') || s.includes('unlock'))
-    return <span className="badge badge-green">{status.trim()}</span>;
+    return <span className="badge badge-green">{text}</span>;
   if (s.includes('block') || s.includes('锁定') || s.includes('no') || s.includes('denied') || s.includes('china'))
-    return <span className="badge badge-red">{status.trim()}</span>;
+    return <span className="badge badge-red">{text}</span>;
   if (s.includes('idc') || s.includes('pending') || s.includes('noprem') || s.includes('nf.only') || s.includes('webonly') || s.includes('apponly'))
-    return <span className="badge badge-amber">{status.trim()}</span>;
-  return <span className="badge badge-gray">{status.trim()}</span>;
+    return <span className="badge badge-amber">{text}</span>;
+  return <span className="badge badge-gray">{text}</span>;
 }
 
-function RegionBadge({ region }: { region?: string }) {
-  if (!region || region === 'null') return null;
+function RegionBadge({ region }: { region?: Scalar }) {
+  const text = displayValue(region);
+  if (!text || text === 'null') return null;
   return (
-    <span className="text-[10px] text-[#666] ml-1 truncate max-w-[80px]" title={region}>
-      {region}
+    <span className="text-[10px] text-[#666] ml-1 truncate max-w-[80px]" title={text}>
+      {text}
     </span>
   );
 }
@@ -47,7 +55,7 @@ export default function StreamingSection({ media }: { media: IPReport['Media'] }
               <span className="text-[13px] text-[#ccc]">{SERVICES[key] || key}</span>
               <RegionBadge region={val.Region} />
             </div>
-            <Badge status={val.Status} />
+            <Badge status={val.Status ?? val.Result} />
           </div>
         ))}
       </div>

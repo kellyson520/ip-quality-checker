@@ -1,4 +1,11 @@
-import type { IPReport } from '../types';
+import type { IPReport, ScoreValue } from '../types';
+
+function toScore(value: ScoreValue): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  return Math.min(100, Math.max(0, Math.round(num)));
+}
 
 function getBarColor(score: number): string {
   if (score <= 20) return 'bg-[#4ade80]';
@@ -14,9 +21,9 @@ function getLabel(score: number): string {
   return '极高';
 }
 
-function ScoreRow({ label, value }: { label: string; value: string }) {
-  const num = parseInt(value, 10);
-  if (isNaN(num)) return null;
+function ScoreRow({ label, value }: { label: string; value: ScoreValue }) {
+  const num = toScore(value);
+  if (num === null) return null;
   return (
     <div className="space-y-1.5">
       <div className="flex justify-between items-center">
@@ -36,7 +43,7 @@ function ScoreRow({ label, value }: { label: string; value: string }) {
 export default function ScoreSection({ score }: { score: IPReport['Score'] }) {
   const entries = Object.entries(score);
   const totalEntry = entries.find(([k]) => k.toLowerCase().includes('total'));
-  const totalScore = totalEntry ? parseInt(totalEntry[1], 10) : null;
+  const totalScore = totalEntry ? toScore(totalEntry[1]) : null;
 
   return (
     <div className="section p-4">

@@ -110,21 +110,7 @@ fn exec_via_stdin(bash: &str, args: &[&str]) -> Result<std::process::Output, Str
 #[cfg(desktop)]
 #[tauri::command]
 async fn run_ip_check() -> Result<String, String> {
-    let bash = find_bash()?;
-    let output = exec_via_stdin(&bash, &["-j", "-n", "-y"])?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-    if !output.status.success() {
-        return Err(format!(
-            "Script exited with status {}: {}",
-            output.status.code().unwrap_or(-1),
-            if stderr.is_empty() { &stdout } else { &stderr }
-        ));
-    }
-
-    Ok(stdout)
+    run_script_blocking(vec!["-j".into(), "-n".into(), "-y".into()]).await
 }
 
 /// Run IP check via bash script with custom args (desktop)
@@ -132,8 +118,20 @@ async fn run_ip_check() -> Result<String, String> {
 #[cfg(desktop)]
 #[tauri::command]
 async fn run_ip_check_with_args(args: Vec<String>) -> Result<String, String> {
-    // Validate all args against whitelist (command injection prevention)
-    for arg in &args {
+    validate_args(&args)?;
+    run_script_blocking(args).await
+}
+
+#[cfg(desktop)]
+async fn run_script_blocking(args: Vec<String>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || run_script(args))
+        .await
+        .map_err(|e| format!("检测任务异常: {}", e))?
+}
+
+#[cfg(desktop)]
+fn validate_args(args: &[String]) -> Result<(), String> {
+    for arg in args {
         if !ALLOWED_ARGS.contains(&arg.as_str()) {
             return Err(format!(
                 "不允许的参数: '{}'。安全参数: {:?}",
@@ -141,10 +139,14 @@ async fn run_ip_check_with_args(args: Vec<String>) -> Result<String, String> {
             ));
         }
     }
-    let bash = find_bash()?;
-    let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let output = exec_via_stdin(&bash, &arg_refs)?;
+    Ok(())
+}
 
+#[cfg(desktop)]
+fn run_script(args: Vec<String>) -> Result<String, String> {
+    let bash = find_bash()?;
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let output = exec_via_stdin(&bash, &arg_refs)?;
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
@@ -326,8 +328,9 @@ async fn run_ip_check() -> Result<String, String> {
     let ipinfo = ipinfo_r.unwrap_or(serde_json::json!({}));
 
     // Step 5: Check streaming services concurrently
-    let (tt, nf, dp, yt, am, rd, gp) = tokio::join!(
+    let (tt, bl, nf, dp, yt, am, rd, gp) = tokio::join!(
         check_http_status("https://www.tiktok.com/"),
+        check_http_status("https://www.bilibili.tv/"),
         check_http_status("https://www.netflix.com/title/81280792"),
         check_http_status("https://www.disneyplus.com/"),
         check_http_status("https://www.youtube.com/"),
@@ -551,6 +554,7 @@ async fn run_ip_check() -> Result<String, String> {
         },
         "Media": {
             "TikTok": { "Status": yn(tt), "Region": "null", "Type": "null" },
+            "Bilibili": { "Status": yn(bl), "Region": "null", "Type": "null" },
             "DisneyPlus": { "Status": yn(dp), "Region": "null", "Type": "null" },
             "Netflix": { "Status": yn(nf), "Region": "null", "Type": "null" },
             "Youtube": { "Status": yn(yt), "Region": "null", "Type": "null" },
@@ -578,7 +582,6 @@ async fn run_ip_check_with_args(_args: Vec<String>) -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![run_ip_check, run_ip_check_with_args])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
