@@ -219,20 +219,19 @@ fn opt_str(v: &Value, path: &[&str]) -> Option<String> {
 /// Helper: get number from nested JSON path.
 #[cfg(mobile)]
 fn opt_f64(v: &Value, path: &[&str]) -> Option<f64> {
-    jvalue(v, path).and_then(|cur| {
-        cur.as_f64().or_else(|| cur.as_str()?.parse::<f64>().ok())
-    })
+    jvalue(v, path).and_then(|cur| cur.as_f64().or_else(|| cur.as_str()?.parse::<f64>().ok()))
 }
 
 /// Helper: get bool from nested JSON path.
 #[cfg(mobile)]
 fn opt_bool(v: &Value, path: &[&str]) -> Option<bool> {
     jvalue(v, path).and_then(|cur| {
-        cur.as_bool().or_else(|| match cur.as_str()?.to_ascii_lowercase().as_str() {
-            "true" | "yes" | "1" => Some(true),
-            "false" | "no" | "0" => Some(false),
-            _ => None,
-        })
+        cur.as_bool()
+            .or_else(|| match cur.as_str()?.to_ascii_lowercase().as_str() {
+                "true" | "yes" | "1" => Some(true),
+                "false" | "no" | "0" => Some(false),
+                _ => None,
+            })
     })
 }
 
@@ -269,12 +268,126 @@ fn region_or_null(value: Option<String>) -> Value {
     string_or_null(value.map(|s| s.trim_matches(['[', ']']).to_string()))
 }
 
+#[cfg(mobile)]
+const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36";
+
+#[cfg(mobile)]
+const RAW_GITHUB: &str = "https://testingcf.jsdelivr.net/gh/xykt/IPQuality@main/";
+
+#[cfg(mobile)]
+fn empty_string() -> Value {
+    Value::String(String::new())
+}
+
+#[cfg(mobile)]
+fn media_failed() -> (Value, Value, Value) {
+    (
+        Value::String("Failed".into()),
+        empty_string(),
+        empty_string(),
+    )
+}
+
+#[cfg(mobile)]
+fn media_block() -> (Value, Value, Value) {
+    (
+        Value::String("Block".into()),
+        empty_string(),
+        empty_string(),
+    )
+}
+
+#[cfg(mobile)]
+fn media_type(native: bool) -> Value {
+    Value::String(if native { "Native" } else { "ViaDNS" }.into())
+}
+
+#[cfg(mobile)]
+fn is_public_dns_ip(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            !(v4.is_private()
+                || v4.is_loopback()
+                || v4.is_link_local()
+                || v4.is_multicast()
+                || v4.is_broadcast()
+                || v4.is_unspecified()
+                || v4.octets()[0] == 0)
+        }
+        std::net::IpAddr::V6(v6) => {
+            let first = v6.segments()[0];
+            !(v6.is_loopback()
+                || v6.is_multicast()
+                || v6.is_unspecified()
+                || (first & 0xfe00) == 0xfc00
+                || (first & 0xffc0) == 0xfe80)
+        }
+    }
+}
+
+#[cfg(mobile)]
+async fn resolve_ips(host: &str) -> Vec<std::net::IpAddr> {
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        tokio::net::lookup_host((host, 80)),
+    )
+    .await
+    {
+        Ok(Ok(addrs)) => {
+            let mut ips = Vec::new();
+            for addr in addrs {
+                let ip = addr.ip();
+                if !ips.contains(&ip) {
+                    ips.push(ip);
+                }
+            }
+            ips
+        }
+        _ => Vec::new(),
+    }
+}
+
+#[cfg(mobile)]
+async fn dns_primary_ok(host: &str) -> bool {
+    resolve_ips(host).await.into_iter().any(is_public_dns_ip)
+}
+
+#[cfg(mobile)]
+async fn dns_answer_count_gt_two(host: &str) -> bool {
+    resolve_ips(host).await.len() > 2
+}
+
+#[cfg(mobile)]
+async fn dns_random_subdomain_has_no_answer(host: &str) -> bool {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or_default();
+    resolve_ips(&format!("test{}.{}", nanos, host))
+        .await
+        .is_empty()
+}
+
+#[cfg(mobile)]
+async fn unlock_type_for(host: &str, use_answer_count: bool) -> Value {
+    let primary = dns_primary_ok(host);
+    let random = dns_random_subdomain_has_no_answer(host);
+    if use_answer_count {
+        let answer_count = dns_answer_count_gt_two(host);
+        let (primary, answer_count, random) = tokio::join!(primary, answer_count, random);
+        media_type(primary && answer_count && random)
+    } else {
+        let (primary, random) = tokio::join!(primary, random);
+        media_type(primary && random)
+    }
+}
+
 /// Fetch JSON from URL using shared client (mobile only)
 #[cfg(mobile)]
 async fn fetch_json(url: &str) -> Result<Value, String> {
     let resp = get_client()
         .get(url)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
+        .header("User-Agent", USER_AGENT)
         .header("Accept", "application/json")
         .send()
         .await
@@ -324,9 +437,10 @@ async fn fetch_maxmind(ip: &str) -> Value {
 async fn check_http_status(url: &str) -> u16 {
     match get_client()
         .get(url)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
+        .header("User-Agent", USER_AGENT)
         .send()
-        .await {
+        .await
+    {
         Ok(resp) => resp.status().as_u16(),
         Err(_) => 0,
     }
@@ -337,31 +451,79 @@ async fn check_http_status(url: &str) -> u16 {
 async fn fetch_text(url: &str) -> Result<String, String> {
     let resp = get_client()
         .get(url)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
+        .header("User-Agent", USER_AGENT)
         .header("Accept-Language", "en")
         .send()
         .await
         .map_err(|e| format!("Request failed: {}", e))?;
 
-    resp.text().await.map_err(|e| format!("Read response failed: {}", e))
+    resp.text()
+        .await
+        .map_err(|e| format!("Read response failed: {}", e))
 }
 
 /// Fetch text with custom headers (mobile only)
 #[cfg(mobile)]
 async fn fetch_text_with_headers(url: &str, headers: &[(&str, &str)]) -> Result<String, String> {
-    let mut req = get_client()
-        .get(url)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36");
+    let mut req = get_client().get(url).header("User-Agent", USER_AGENT);
     for (k, v) in headers {
         req = req.header(*k, *v);
     }
-    let resp = req.send().await.map_err(|e| format!("Request failed: {}", e))?;
-    resp.text().await.map_err(|e| format!("Read response failed: {}", e))
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+    resp.text()
+        .await
+        .map_err(|e| format!("Read response failed: {}", e))
+}
+
+#[cfg(mobile)]
+async fn post_text_with_headers(
+    url: &str,
+    headers: &[(&str, &str)],
+    body: String,
+) -> Result<String, String> {
+    let mut req = get_client().post(url).header("User-Agent", USER_AGENT);
+    for (k, v) in headers {
+        req = req.header(*k, *v);
+    }
+    let resp = req
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+    resp.text()
+        .await
+        .map_err(|e| format!("Read response failed: {}", e))
+}
+
+#[cfg(mobile)]
+async fn effective_url_contains(url: &str, needle: &str) -> bool {
+    match get_client()
+        .get(url)
+        .header("User-Agent", USER_AGENT)
+        .send()
+        .await
+    {
+        Ok(resp) => resp.url().as_str().contains(needle),
+        Err(_) => false,
+    }
+}
+
+#[cfg(mobile)]
+async fn fetch_media_cookie_templates() -> Vec<String> {
+    fetch_text(&format!("{}ref/cookies.txt", RAW_GITHUB))
+        .await
+        .map(|text| text.lines().map(ToOwned::to_owned).collect())
+        .unwrap_or_default()
 }
 
 #[cfg(mobile)]
 async fn fetch_ipregistry(ip: &str) -> Result<Value, String> {
-    let html = fetch_text("https://ipregistry.co").await.unwrap_or_default();
+    let html = fetch_text("https://ipregistry.co")
+        .await
+        .unwrap_or_default();
     let key = html
         .split("apiKey=\"")
         .nth(1)
@@ -369,14 +531,28 @@ async fn fetch_ipregistry(ip: &str) -> Result<Value, String> {
         .filter(|value| !value.is_empty())
         .unwrap_or("sb69ksjcajfs4c");
     let url = format!("https://api.ipregistry.co/{}?hostname=true&key={}", ip, key);
-    fetch_json(&url).await
+    let text = fetch_text_with_headers(
+        &url,
+        &[
+            ("authority", "api.ipregistry.co"),
+            ("origin", "https://ipregistry.co"),
+            ("referer", "https://ipregistry.co/"),
+            ("Accept", "application/json"),
+        ],
+    )
+    .await?;
+    serde_json::from_str(&text).map_err(|e| format!("JSON parse error: {}", e))
 }
 
 /// Generate DMS (Degrees, Minutes, Seconds) from latitude and longitude
 #[cfg(mobile)]
 fn generate_dms(lat: f64, lon: f64) -> String {
     fn convert_single(coord: f64, direction_positive: char, direction_negative: char) -> String {
-        let dir = if coord >= 0.0 { direction_positive } else { direction_negative };
+        let dir = if coord >= 0.0 {
+            direction_positive
+        } else {
+            direction_negative
+        };
         let abs_coord = coord.abs();
         let degrees = abs_coord as i64;
         let fractional = abs_coord - degrees as f64;
@@ -407,77 +583,89 @@ fn generate_map_url(lat: f64, lon: f64, radius: f64) -> String {
 /// TikTok region detection (matching ip.sh logic)
 #[cfg(mobile)]
 async fn detect_tiktok(_ip: &str) -> (Value, Value, Value) {
+    let unlock_type = unlock_type_for("tiktok.com", false).await;
     // Try main page first
     let body = match fetch_text("https://www.tiktok.com/").await {
         Ok(b) => b,
-        Err(_) => return (Value::Null, Value::Null, Value::Null),
+        Err(_) => return media_failed(),
     };
-    
+    let body = if body.contains("Please wait...") {
+        fetch_text("https://www.tiktok.com/explore")
+            .await
+            .unwrap_or(body)
+    } else {
+        body
+    };
+
     // Check for region in response
     if let Some(region) = extract_json_string_field(&body, "region") {
         return (
             Value::String("Yes".into()),
             region_or_null(Some(region)),
-            Value::String("Native".into()),
+            unlock_type,
         );
     }
-    
+
     // Try explore page with different headers
     let body2 = match fetch_text_with_headers("https://www.tiktok.com/explore", &[
         ("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"),
         ("Accept-Language", "en"),
     ]).await {
         Ok(b) => b,
-        Err(_) => return (Value::Null, Value::Null, Value::Null),
+        Err(_) => return media_failed(),
     };
-    
+
     if let Some(region) = extract_json_string_field(&body2, "region") {
         return (
             Value::String("IDC".into()),
             region_or_null(Some(region)),
-            Value::String("Native".into()),
+            unlock_type,
         );
     }
-    
-    (Value::String("Block".into()), Value::Null, Value::Null)
+
+    media_failed()
 }
 
 /// Netflix region detection (matching ip.sh logic)
 #[cfg(mobile)]
 async fn detect_netflix() -> (Value, Value, Value) {
+    let unlock_type = unlock_type_for("netflix.com", true).await;
     // Check two title URLs
     let url1 = "https://www.netflix.com/title/81280792";
     let url2 = "https://www.netflix.com/title/70143836";
-    
+
     let (r1, r2) = tokio::join!(fetch_text(url1), fetch_text(url2));
     let body1 = r1.unwrap_or_default();
     let body2 = r2.unwrap_or_default();
-    
+
     if body1.is_empty() || body2.is_empty() {
-        return (Value::Null, Value::Null, Value::Null);
+        return media_failed();
     }
-    
+
     // Extract region from JSON
     let region1 = extract_netflix_region(&body1);
     let region2 = extract_netflix_region(&body2);
     let region = if region1.is_some() { region1 } else { region2 };
-    
+
     let has_error1 = body1.contains("Oh no!");
     let has_error2 = body2.contains("Oh no!");
-    
+
     if has_error1 && has_error2 {
         // Only original content available
-        let status = if region.is_some() { "NF.Only" } else { "Block" };
-        (Value::String(status.into()), region_or_null(region), Value::Null)
+        (
+            Value::String("NF.Only".into()),
+            region_or_null(region),
+            unlock_type,
+        )
     } else if !has_error1 || !has_error2 {
         // Full unlock
         (
             Value::String("Yes".into()),
             region_or_null(region),
-            Value::String("Native".into()),
+            unlock_type,
         )
     } else {
-        (Value::String("Block".into()), Value::Null, Value::Null)
+        media_block()
     }
 }
 
@@ -500,34 +688,43 @@ fn extract_netflix_region(body: &str) -> Option<String> {
 /// YouTube Premium detection (matching ip.sh logic)
 #[cfg(mobile)]
 async fn detect_youtube() -> (Value, Value, Value) {
+    let unlock_type = unlock_type_for("www.youtube.com", false).await;
     let url = "https://www.youtube.com/premium";
     let body = match fetch_text_with_headers(url, &[
         ("Accept-Language", "en"),
         ("Cookie", "YSC=BiCUU3-5Gdk; CONSENT=YES+cb.20220301-11-p0.en+FX+700; GPS=1; VISITOR_INFO1_LIVE=4VwPMkB7W5A; PREF=tz=Asia.Shanghai"),
     ]).await {
         Ok(b) => b,
-        Err(_) => return (Value::Null, Value::Null, Value::Null),
+        Err(_) => return media_failed(),
     };
-    
+
     if body.contains("www.google.cn") {
-        return (Value::String("China".into()), Value::String("CN".into()), Value::Null);
+        return (
+            Value::String("China".into()),
+            Value::String("CN".into()),
+            empty_string(),
+        );
     }
-    
+
     if body.contains("Premium is not available in your country") {
-        return (Value::String("NoPrem.".into()), Value::Null, Value::Null);
+        return (
+            Value::String("NoPrem.".into()),
+            empty_string(),
+            empty_string(),
+        );
     }
-    
+
     // Extract region
     let region = extract_youtube_region(&body);
     if body.contains("ad-free") {
         return (
             Value::String("Yes".into()),
             region_or_null(region),
-            Value::String("Native".into()),
+            unlock_type,
         );
     }
-    
-    (Value::String("Failed".into()), Value::Null, Value::Null)
+
+    media_failed()
 }
 
 /// Extract region from YouTube response
@@ -545,10 +742,12 @@ fn extract_youtube_region(body: &str) -> Option<String> {
 /// Disney+ region detection (simplified - matching ip.sh key logic)
 #[cfg(mobile)]
 async fn detect_disney() -> (Value, Value, Value) {
-    const AUTH: &str = "Bearer ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84";
+    let unlock_type = unlock_type_for("disneyplus.com", false).await;
+    const AUTH: &str =
+        "Bearer ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84";
     let assertion_resp = match get_client()
         .post("https://disney.api.edge.bamgrid.com/devices")
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
+        .header("User-Agent", USER_AGENT)
         .header("authorization", AUTH)
         .header("content-type", "application/json; charset=UTF-8")
         .body(r#"{"deviceFamily":"browser","applicationRuntime":"chrome","deviceProfile":"windows","attributes":{}}"#)
@@ -556,110 +755,121 @@ async fn detect_disney() -> (Value, Value, Value) {
         .await
     {
         Ok(resp) => resp.text().await.unwrap_or_default(),
-        Err(_) => return (Value::Null, Value::Null, Value::Null),
+        Err(_) => return media_failed(),
     };
 
     let assertion_json: Value = match serde_json::from_str(&assertion_resp) {
         Ok(v) => v,
-        Err(_) => return (Value::Null, Value::Null, Value::Null),
+        Err(_) => return media_failed(),
     };
     let assertion = match opt_str(&assertion_json, &["assertion"]) {
         Some(v) => v,
-        None => return (Value::Null, Value::Null, Value::Null),
+        None => return media_failed(),
     };
 
-    let token_body = format!(
-        "grant_type=urn:ietf:params:oauth:grant-type:token-exchange&platform=browser&subject_token={}&subject_token_type=urn:bamtech:params:oauth:token-type:device",
-        assertion
-    );
-    let token_resp = match get_client()
-        .post("https://disney.api.edge.bamgrid.com/token")
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
-        .header("authorization", AUTH)
-        .header("content-type", "application/x-www-form-urlencoded")
-        .body(token_body)
-        .send()
-        .await
+    let cookie_templates = fetch_media_cookie_templates().await;
+    let token_body = cookie_templates
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange&latitude=0&longitude=0&platform=browser&subject_token=DISNEYASSERTION&subject_token_type=urn%3Abamtech%3Aparams%3Aoauth%3Atoken-type%3Adevice".to_string())
+        .replace("DISNEYASSERTION", &assertion);
+    let token_resp = match post_text_with_headers(
+        "https://disney.api.edge.bamgrid.com/token",
+        &[
+            ("authorization", AUTH),
+            ("content-type", "application/x-www-form-urlencoded"),
+        ],
+        token_body,
+    )
+    .await
     {
-        Ok(resp) => resp.text().await.unwrap_or_default(),
-        Err(_) => return (Value::Null, Value::Null, Value::Null),
+        Ok(text) => text,
+        Err(_) => return media_failed(),
     };
     if token_resp.contains("forbidden-location") || token_resp.contains("403 ERROR") {
-        return (Value::String("Block".into()), Value::Null, Value::Null);
+        return media_block();
     }
     let token_json: Value = match serde_json::from_str(&token_resp) {
         Ok(v) => v,
-        Err(_) => return (Value::Null, Value::Null, Value::Null),
+        Err(_) => return media_failed(),
     };
     let refresh_token = match opt_str(&token_json, &["refresh_token"]) {
         Some(v) => v,
-        None => return (Value::Null, Value::Null, Value::Null),
+        None => return media_failed(),
     };
 
-    let graphql_body = serde_json::json!({
-        "query": "query { sdk { session { inSupportedLocation location { countryCode } } } }",
-        "variables": {},
-        "operationName": null,
-        "extensions": {
-            "sdk": {
-                "token": {
-                    "accessToken": refresh_token
-                }
-            }
-        }
-    });
-    let gql_resp = match get_client()
-        .post("https://disney.api.edge.bamgrid.com/graph/v1/device/graphql")
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
-        .header("authorization", "ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84")
-        .json(&graphql_body)
-        .send()
-        .await
+    let graphql_body = cookie_templates
+        .get(7)
+        .cloned()
+        .unwrap_or_else(|| r#"{"query":"mutation refreshToken($input: RefreshTokenInput!) {\n            refreshToken(refreshToken: $input) {\n                activeSession {\n                    sessionId\n                }\n            }\n        }","variables":{"input":{"refreshToken":"ILOVEDISNEY"}}}"#.to_string())
+        .replace("ILOVEDISNEY", &refresh_token);
+    let gql_resp = match post_text_with_headers(
+        "https://disney.api.edge.bamgrid.com/graph/v1/device/graphql",
+        &[(
+            "authorization",
+            "ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84",
+        )],
+        graphql_body,
+    )
+    .await
     {
-        Ok(resp) => resp.text().await.unwrap_or_default(),
-        Err(_) => return (Value::Null, Value::Null, Value::Null),
+        Ok(text) => text,
+        Err(_) => return media_failed(),
     };
     let gql_json: Value = match serde_json::from_str(&gql_resp) {
         Ok(v) => v,
-        Err(_) => return (Value::Null, Value::Null, Value::Null),
+        Err(_) => return media_failed(),
     };
-    let region = opt_str(&gql_json, &["extensions", "sdk", "session", "location", "countryCode"]);
-    let supported = opt_bool(&gql_json, &["extensions", "sdk", "session", "inSupportedLocation"]);
-    match (region, supported) {
-        (Some(region), Some(true)) => (
+    let region = opt_str(
+        &gql_json,
+        &["extensions", "sdk", "session", "location", "countryCode"],
+    );
+    let supported = opt_bool(
+        &gql_json,
+        &["extensions", "sdk", "session", "inSupportedLocation"],
+    );
+    let unavailable = effective_url_contains("https://disneyplus.com", "unavailable").await;
+    match (region, supported, unavailable) {
+        (Some(region), _, _) if region == "JP" => (
             Value::String("Yes".into()),
             Value::String(region),
-            Value::String("Native".into()),
+            unlock_type,
         ),
-        (Some(region), Some(false)) => (
+        (Some(region), Some(false), false) => (
             Value::String("Pending".into()),
             Value::String(region),
-            Value::String("Native".into()),
+            unlock_type,
         ),
-        (None, _) => (Value::String("Block".into()), Value::Null, Value::Null),
-        (Some(region), None) => (Value::Null, Value::String(region), Value::Null),
+        (Some(_), _, true) | (None, _, _) => media_block(),
+        (Some(region), Some(true), _) => (
+            Value::String("Yes".into()),
+            Value::String(region),
+            unlock_type,
+        ),
+        (Some(_), None, _) => media_failed(),
     }
 }
 
 /// Amazon Prime Video region detection (matching ip.sh logic)
 #[cfg(mobile)]
 async fn detect_amazon() -> (Value, Value, Value) {
+    let unlock_type = unlock_type_for("www.primevideo.com", false).await;
     let url = "https://www.primevideo.com";
     let body = match fetch_text(url).await {
         Ok(b) => b,
-        Err(_) => return (Value::Null, Value::Null, Value::Null),
+        Err(_) => return media_failed(),
     };
-    
+
     // Extract currentTerritory
     if let Some(territory) = extract_amazon_territory(&body) {
         return (
             Value::String("Yes".into()),
             Value::String(territory),
-            Value::String("Native".into()),
+            unlock_type,
         );
     }
-    
-    (Value::String("Block".into()), Value::Null, Value::Null)
+
+    media_block()
 }
 
 /// Extract territory from Amazon response
@@ -677,28 +887,32 @@ fn extract_amazon_territory(body: &str) -> Option<String> {
 /// Reddit region detection (matching ip.sh logic)
 #[cfg(mobile)]
 async fn detect_reddit() -> (Value, Value, Value) {
+    let unlock_type = unlock_type_for("reddit.com", true).await;
     let url = "https://www.reddit.com/";
-    let resp = match get_client().get(url)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
-        .send().await {
+    let resp = match get_client()
+        .get(url)
+        .header("User-Agent", USER_AGENT)
+        .send()
+        .await
+    {
         Ok(r) => r,
-        Err(_) => return (Value::Null, Value::Null, Value::Null),
+        Err(_) => return media_failed(),
     };
-    
+
     let status = resp.status().as_u16();
     let body = resp.text().await.unwrap_or_default();
-    
+
     match status {
         200 => {
             let region = extract_reddit_region(&body);
             (
                 Value::String("Yes".into()),
                 region_or_null(region),
-                Value::String("Native".into()),
+                unlock_type,
             )
-        },
-        403 => (Value::String("Block".into()), Value::Null, Value::Null),
-        _ => (Value::String("Failed".into()), Value::Null, Value::Null),
+        }
+        403 => media_block(),
+        _ => media_failed(),
     }
 }
 
@@ -717,45 +931,61 @@ fn extract_reddit_region(body: &str) -> Option<String> {
 /// ChatGPT detection (matching ip.sh complex logic)
 #[cfg(mobile)]
 async fn detect_chatgpt() -> (Value, Value, Value) {
+    let (chat_type, ios_type, api_type) = tokio::join!(
+        unlock_type_for("chat.openai.com", true),
+        unlock_type_for("ios.chat.openai.com", true),
+        unlock_type_for("api.openai.com", false)
+    );
+    let unlock_type = if chat_type == Value::String("ViaDNS".into())
+        || ios_type == Value::String("ViaDNS".into())
+        || api_type == Value::String("ViaDNS".into())
+    {
+        Value::String("ViaDNS".into())
+    } else {
+        Value::String("Native".into())
+    };
     // Check multiple endpoints like ip.sh
     let (r1, r2, r3) = tokio::join!(
         fetch_text("https://api.openai.com/compliance/cookie_requirements"),
         fetch_text("https://ios.chat.openai.com/"),
         fetch_text("https://chat.openai.com/cdn-cgi/trace")
     );
-    
+
     let body1 = r1.unwrap_or_default();
     let body2 = r2.unwrap_or_default();
     let trace = r3.unwrap_or_default();
-    
-    let has_unsupported = body1.contains("unsupported_country");
+
+    let mut has_unsupported = body1.contains("unsupported_country");
     let has_vpn = body2.contains("VPN");
-    
+    if has_unsupported && check_http_status("https://chatgpt.com/favicon.ico").await != 403 {
+        has_unsupported = false;
+    }
+
     // Extract country code from trace
     let country_code = extract_trace_country(&trace);
-    
+
     if !has_unsupported && !has_vpn && !body1.is_empty() && !body2.is_empty() {
         (
             Value::String("Yes".into()),
             region_or_null(country_code),
-            Value::String("Native".into()),
+            unlock_type,
         )
     } else if has_vpn && has_unsupported {
-        (Value::String("Block".into()), Value::Null, Value::Null)
+        media_block()
     } else if !has_unsupported && has_vpn {
         (
             Value::String("WebOnly".into()),
             region_or_null(country_code),
-            Value::String("Native".into()),
+            unlock_type,
         )
     } else if has_unsupported && !has_vpn {
         (
             Value::String("APPOnly".into()),
             region_or_null(country_code),
-            Value::String("Native".into()),
+            unlock_type,
         )
     } else {
-        (Value::Null, Value::Null, Value::Null)
+        media_failed()
     }
 }
 
@@ -789,11 +1019,15 @@ async fn check_bilibili() -> (Value, Value, Value) {
     let url = "https://www.bilibili.tv/";
     let status = check_http_status(url).await;
     if status == 200 {
-        (Value::String("Yes".into()), Value::Null, Value::String("Native".into()))
+        (
+            Value::String("Yes".into()),
+            Value::Null,
+            Value::String("Native".into()),
+        )
     } else if status == 0 {
-        (Value::Null, Value::Null, Value::Null)
+        media_failed()
     } else {
-        (Value::String("Block".into()), Value::Null, Value::Null)
+        media_block()
     }
 }
 
@@ -814,7 +1048,9 @@ async fn check_smtp_banner(addr: &str) -> Option<bool> {
     };
 
     let mut buf = [0u8; 256];
-    let read = match tokio::time::timeout(std::time::Duration::from_secs(5), stream.read(&mut buf)).await {
+    let read = match tokio::time::timeout(std::time::Duration::from_secs(5), stream.read(&mut buf))
+        .await
+    {
         Ok(Ok(n)) => n,
         Ok(Err(_)) => return Some(false),
         Err(_) => return Some(false),
@@ -874,6 +1110,11 @@ async fn check_email_service(domain: &str) -> Value {
 /// Check SMTP port 25 connectivity (matching ip.sh's nc-based check)
 #[cfg(mobile)]
 async fn check_smtp_port25(_ip: &str) -> Value {
+    match std::net::TcpListener::bind(("0.0.0.0", 25)) {
+        Ok(listener) => drop(listener),
+        Err(err) if err.kind() == std::io::ErrorKind::AddrInUse => return Value::Null,
+        Err(_) => {}
+    }
     match check_smtp_banner("smtp.mailgun.org:25").await {
         Some(true) => Value::Bool(true),
         Some(false) => Value::Bool(false),
@@ -881,20 +1122,111 @@ async fn check_smtp_port25(_ip: &str) -> Value {
     }
 }
 
+#[cfg(mobile)]
+fn reversed_ipv4(ip: &str) -> Option<String> {
+    let octets = ip
+        .split('.')
+        .map(str::parse::<u8>)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    if octets.len() != 4 {
+        return None;
+    }
+    Some(format!(
+        "{}.{}.{}.{}",
+        octets[3], octets[2], octets[1], octets[0]
+    ))
+}
+
+#[cfg(mobile)]
+async fn check_dnsbl(ip: &str) -> Value {
+    let reversed = match reversed_ipv4(ip) {
+        Some(value) => value,
+        None => {
+            return serde_json::json!({
+                "Total": null,
+                "Clean": null,
+                "Marked": null,
+                "Blacklisted": null
+            });
+        }
+    };
+    let list = fetch_text(&format!("{}ref/dnsbl.list", RAW_GITHUB))
+        .await
+        .unwrap_or_default();
+    let mut zones = list
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    zones.sort();
+    zones.dedup();
+
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(50));
+    let mut tasks = tokio::task::JoinSet::new();
+    for zone in zones {
+        let query = format!("{}.{}", reversed, zone);
+        let semaphore = semaphore.clone();
+        tasks.spawn(async move {
+            let _permit = semaphore.acquire_owned().await.ok();
+            let ips = resolve_ips(&query).await;
+            if ips.is_empty() {
+                "Clean"
+            } else if ips
+                .iter()
+                .any(|ip| matches!(ip, std::net::IpAddr::V4(v4) if v4.octets() == [127, 0, 0, 2]))
+            {
+                "Blacklisted"
+            } else {
+                "Other"
+            }
+        });
+    }
+
+    let mut total = 0u64;
+    let mut clean = 0u64;
+    let mut marked = 0u64;
+    let mut blacklisted = 0u64;
+    while let Some(result) = tasks.join_next().await {
+        if let Ok(status) = result {
+            total += 1;
+            match status {
+                "Clean" => clean += 1,
+                "Blacklisted" => blacklisted += 1,
+                _ => marked += 1,
+            }
+        }
+    }
+
+    serde_json::json!({
+        "Total": total,
+        "Clean": clean,
+        "Marked": marked,
+        "Blacklisted": blacklisted
+    })
+}
+
 /// Parse DBIP HTML to extract robot/proxy/abuser/risk (matching ip.sh's awk logic)
 #[cfg(mobile)]
 fn parse_dbip_html(body: &str) -> (Value, Value, Value, Value, Value) {
     if body.is_empty() {
-        return (Value::Null, Value::Null, Value::Null, Value::Null, Value::Null);
+        return (
+            Value::Null,
+            Value::Null,
+            Value::Null,
+            Value::Null,
+            Value::Null,
+        );
     }
-    
+
     // Find crawler/proxy/abuser status from HTML
     let mut robot = Value::Null;
     let mut proxy = Value::Null;
     let mut abuser = Value::Null;
     let mut score = Value::Null;
     let mut country_code = Value::Null;
-    
+
     // Extract country code from JSON-LD
     if let Some(start) = body.find(r#""countryCode""#) {
         let rest = &body[start + 14..];
@@ -908,7 +1240,7 @@ fn parse_dbip_html(body: &str) -> (Value, Value, Value, Value, Value) {
             }
         }
     }
-    
+
     if let Some(start) = body.find("Estimated threat level for this IP address is") {
         let rest = &body[start..];
         if let Some(span_start) = rest.find("<span") {
@@ -963,7 +1295,7 @@ fn parse_dbip_html(body: &str) -> (Value, Value, Value, Value, Value) {
             abuser = Value::Bool(*v);
         }
     }
-    
+
     (robot, proxy, abuser, score, country_code)
 }
 
@@ -988,6 +1320,79 @@ fn parse_ipapi_score(data: &Value) -> Option<f64> {
             .and_then(|raw| raw.parse::<f64>().ok())
             .map(|score| score * 100.0)
     })
+}
+
+#[cfg(mobile)]
+fn score_string_or_null(value: Option<f64>) -> Value {
+    match value {
+        Some(v) if (v.fract()).abs() < f64::EPSILON => Value::String(format!("{}", v as i64)),
+        Some(v) => Value::String(format!("{}", v)),
+        None => Value::Null,
+    }
+}
+
+#[cfg(mobile)]
+fn percent_score_or_null(value: Option<f64>) -> Value {
+    value
+        .map(|v| Value::String(format!("{:.2}%", v)))
+        .unwrap_or(Value::Null)
+}
+
+#[cfg(mobile)]
+fn classify_standard_type(value: Option<String>) -> Value {
+    let label = match value.unwrap_or_default().to_ascii_lowercase().as_str() {
+        "business" => "Business",
+        "isp" => "ISP",
+        "hosting" => "Hosting",
+        "education" => "Education",
+        "government" => "Government",
+        "banking" => "Banking",
+        _ => "Other",
+    };
+    Value::String(label.into())
+}
+
+#[cfg(mobile)]
+fn classify_abuse_usage(value: Option<String>) -> Value {
+    let label = match value.unwrap_or_default().to_ascii_lowercase().as_str() {
+        "commercial" => "Business",
+        "data center/web hosting/transit" => "Hosting",
+        "university/college/school" => "Education",
+        "government" => "Government",
+        "banking" => "Banking",
+        "organization" => "Organization",
+        "military" => "Military",
+        "library" => "Library",
+        "content delivery network" => "CDN",
+        "fixed line isp" => "Line ISP",
+        "mobile isp" => "Mobile ISP",
+        "search engine spider" => "Web Spider",
+        "reserved" => "Reserved",
+        _ => "Other",
+    };
+    Value::String(label.into())
+}
+
+#[cfg(mobile)]
+fn classify_ip2location_usage(value: Option<String>) -> Value {
+    let raw = value.unwrap_or_default();
+    let first = raw.split('/').next().unwrap_or("").to_ascii_uppercase();
+    let label = match first.as_str() {
+        "COM" => "Business",
+        "DCH" => "Hosting",
+        "EDU" => "Education",
+        "GOV" => "Government",
+        "ORG" => "Organization",
+        "MIL" => "Military",
+        "LIB" => "Library",
+        "CDN" => "CDN",
+        "ISP" => "Line ISP",
+        "MOB" => "Mobile ISP",
+        "SES" => "Web Spider",
+        "RSV" => "Reserved",
+        _ => "Other",
+    };
+    Value::String(label.into())
 }
 
 /// Format current time as human-readable string (matching bash script format)
@@ -1119,16 +1524,14 @@ async fn run_ip_check() -> Result<String, String> {
     // Step 5: Check streaming services with REAL region detection (matching ip.sh logic)
     let (
         (tt_status, tt_region, tt_type),
-        (bl_status, _, _),
         (nf_status, nf_region, nf_type),
         (dp_status, dp_region, dp_type),
         (yt_status, yt_region, yt_type),
         (am_status, am_region, am_type),
         (rd_status, rd_region, rd_type),
-        (gp_status, gp_region, gp_type)
+        (gp_status, gp_region, gp_type),
     ) = tokio::join!(
         detect_tiktok(&ip),
-        check_bilibili(),
         detect_netflix(),
         detect_disney(),
         detect_youtube(),
@@ -1137,21 +1540,46 @@ async fn run_ip_check() -> Result<String, String> {
         detect_chatgpt()
     );
 
-    // Step 6: Check mail services via MX records on SMTP port 25.
-    let (gmail, outlook, yahoo, apple, qq, mailru, aol, gmx, mailcom, mail163, sohu, sina) = tokio::join!(
-        check_email_service("gmail.com"),
-        check_email_service("outlook.com"),
-        check_email_service("yahoo.com"),
-        check_email_service("me.com"),
-        check_email_service("qq.com"),
-        check_email_service("mail.ru"),
-        check_email_service("aol.com"),
-        check_email_service("gmx.com"),
-        check_email_service("mail.com"),
-        check_email_service("163.com"),
-        check_email_service("sohu.com"),
-        check_email_service("sina.com")
-    );
+    // Step 6: Check mail services. ip.sh only tests providers when local port 25 works.
+    let port25 = check_smtp_port25(&ip).await;
+    let dnsbl = check_dnsbl(&ip).await;
+    let (gmail, outlook, yahoo, apple, qq, mailru, aol, gmx, mailcom, mail163, sohu, sina) =
+        if port25 == Value::Bool(true) {
+            tokio::join!(
+                check_email_service("gmail.com"),
+                check_email_service("outlook.com"),
+                check_email_service("yahoo.com"),
+                check_email_service("me.com"),
+                check_email_service("qq.com"),
+                check_email_service("mail.ru"),
+                check_email_service("aol.com"),
+                check_email_service("gmx.com"),
+                check_email_service("mail.com"),
+                check_email_service("163.com"),
+                check_email_service("sohu.com"),
+                check_email_service("sina.com")
+            )
+        } else {
+            let value = if port25.is_null() {
+                Value::Null
+            } else {
+                Value::Bool(false)
+            };
+            (
+                value.clone(),
+                value.clone(),
+                value.clone(),
+                value.clone(),
+                value.clone(),
+                value.clone(),
+                value.clone(),
+                value.clone(),
+                value.clone(),
+                value.clone(),
+                value.clone(),
+                value,
+            )
+        };
 
     // === Map API responses to bash script JSON format ===
 
@@ -1159,9 +1587,11 @@ async fn run_ip_check() -> Result<String, String> {
     let asn = info["ASN"]["AutonomousSystemNumber"]
         .as_u64()
         .map(|v| Value::String(v.to_string()))
+        .or_else(|| opt_str(&info, &["ASN", "AutonomousSystemNumber"]).map(Value::String))
         .unwrap_or(Value::Null);
     let org = string_or_null(opt_str(&info, &["ASN", "AutonomousSystemOrganization"]));
     let city_name = string_or_null(opt_str(&info, &["City", "Name"]));
+    let city_postal = string_or_null(opt_str(&info, &["City", "PostalCode"]));
     let lat_val = info["City"]["Latitude"].as_f64();
     let lon_val = info["City"]["Longitude"].as_f64();
     let lat = lat_val
@@ -1176,7 +1606,8 @@ async fn run_ip_check() -> Result<String, String> {
     let country_code = opt_str(&info, &["Country", "IsoCode"]);
     let country_name = string_or_null(opt_str(&info, &["Country", "Name"]));
     let reg_country_code = opt_str(&info, &["Country", "RegisteredCountry", "IsoCode"]);
-    let reg_country_name = string_or_null(opt_str(&info, &["Country", "RegisteredCountry", "Name"]));
+    let reg_country_name =
+        string_or_null(opt_str(&info, &["Country", "RegisteredCountry", "Name"]));
     let sub_code = info["City"]["Subdivisions"]
         .as_array()
         .and_then(|a| a.first())
@@ -1225,12 +1656,12 @@ async fn run_ip_check() -> Result<String, String> {
     );
     let scam_robot = any_bool_or_null(&[
         opt_bool(
-        &scam,
-        &["external_datasources", "x4bnet", "is_blacklisted_spambot"],
+            &scam,
+            &["external_datasources", "x4bnet", "is_blacklisted_spambot"],
         ),
         opt_bool(
-        &scam,
-        &["external_datasources", "x4bnet", "is_bot_operamini"],
+            &scam,
+            &["external_datasources", "x4bnet", "is_bot_operamini"],
         ),
         opt_bool(&scam, &["external_datasources", "x4bnet", "is_bot_semrush"]),
     ]);
@@ -1272,7 +1703,30 @@ async fn run_ip_check() -> Result<String, String> {
     // ip2location
     let ip2l_country = opt_str(&ip2l, &["country_code"]);
     let ip2l_usage = opt_str(&ip2l, &["usage_type"]);
+    let ip2l_company_type = opt_str(&ip2l, &["as_info", "as_usage_type"]);
     let ip2l_score = opt_f64(&ip2l, &["fraud_score"]);
+    let ip2l_proxy = match (
+        opt_bool(&ip2l, &["is_proxy"]),
+        opt_bool(&ip2l, &["proxy", "is_public_proxy"]),
+        opt_bool(&ip2l, &["proxy", "is_web_proxy"]),
+    ) {
+        (Some(true), _, _) | (_, Some(true), _) | (_, _, Some(true)) => Some(true),
+        (Some(false), Some(false), Some(false)) => Some(false),
+        _ => None,
+    };
+    let ip2l_tor = opt_bool(&ip2l, &["proxy", "is_tor"]);
+    let ip2l_vpn = opt_bool(&ip2l, &["proxy", "is_vpn"]);
+    let ip2l_server = opt_bool(&ip2l, &["proxy", "is_data_center"]);
+    let ip2l_abuser = opt_bool(&ip2l, &["proxy", "is_spammer"]);
+    let ip2l_robot = match (
+        opt_bool(&ip2l, &["proxy", "is_web_crawler"]),
+        opt_bool(&ip2l, &["proxy", "is_scanner"]),
+        opt_bool(&ip2l, &["proxy", "is_botnet"]),
+    ) {
+        (Some(true), _, _) | (_, Some(true), _) | (_, _, Some(true)) => Some(true),
+        (Some(false), Some(false), Some(false)) => Some(false),
+        _ => None,
+    };
 
     // ipdata
     let ipdata_country = opt_str(&ipdata, &["country_code"]);
@@ -1299,46 +1753,30 @@ async fn run_ip_check() -> Result<String, String> {
         parse_ipqs(&ipqs);
 
     // DBIP (parse HTML)
-    let (dbip_robot, dbip_proxy, dbip_abuser, dbip_risk, dbip_country) = parse_dbip_html(&dbip_body);
-
-    // Port 25 check
-    let port25 = check_smtp_port25(&ip).await;
+    let (dbip_robot, dbip_proxy, dbip_abuser, dbip_risk, dbip_country) =
+        parse_dbip_html(&dbip_body);
 
     // === Build unified output ===
+    let usage_map = serde_json::json!({
+        "IPinfo": classify_standard_type(iio_usage),
+        "ipregistry": classify_standard_type(reg_usage),
+        "ipapi": classify_standard_type(ipapi_usage),
+        "AbuseIPDB": classify_abuse_usage(abuse_usage),
+        "IP2LOCATION": classify_ip2location_usage(ip2l_usage)
+    });
 
-    // Type.Usage: collect from all sources
-    let mut usage_map = serde_json::Map::new();
-    if let Some(value) = iio_usage {
-        usage_map.insert("IPinfo".into(), Value::String(value));
-    }
-    if let Some(value) = reg_usage {
-        usage_map.insert("ipregistry".into(), Value::String(value));
-    }
-    if let Some(value) = ipapi_usage {
-        usage_map.insert("ipapi".into(), Value::String(value));
-    }
-    if let Some(value) = abuse_usage {
-        usage_map.insert("AbuseIPDB".into(), Value::String(value));
-    }
-    if let Some(value) = ip2l_usage {
-        usage_map.insert("IP2LOCATION".into(), Value::String(value));
-    }
-
-    // Type.Company: collect from all sources
-    let mut company_map = serde_json::Map::new();
-    if let Some(value) = iio_company_type {
-        company_map.insert("IPinfo".into(), Value::String(value));
-    }
-    if let Some(value) = reg_company_type {
-        company_map.insert("ipregistry".into(), Value::String(value));
-    }
-    if let Some(value) = ipapi_company_type {
-        company_map.insert("ipapi".into(), Value::String(value));
-    }
+    let company_map = serde_json::json!({
+        "IPinfo": classify_standard_type(iio_company_type),
+        "ipregistry": classify_standard_type(reg_company_type),
+        "ipapi": classify_standard_type(ipapi_company_type),
+        "IP2LOCATION": classify_ip2location_usage(ip2l_company_type)
+    });
 
     let result = serde_json::json!({
         "Head": {
             "IP": ip,
+            "Command": Value::Null,
+            "GitHub": Value::Null,
             "Time": chrono_now(),
             "Version": "mobile-native"
         },
@@ -1350,22 +1788,27 @@ async fn run_ip_check() -> Result<String, String> {
             "DMS": dms,
             "Map": map_url,
             "TimeZone": timezone,
-            "City": { "Name": city_name },
+            "City": {
+                "Name": city_name,
+                "PostalCode": city_postal,
+                "SubCode": string_or_null(sub_code),
+                "Subdivisions": string_or_null(sub_name)
+            },
             "Region": { "Code": string_or_null(country_code.clone()), "Name": country_name },
             "Continent": { "Code": continent_code, "Name": continent_name },
             "RegisteredRegion": { "Code": string_or_null(reg_country_code.clone()), "Name": reg_country_name },
             "Type": info_type
         },
         "Type": {
-            "Usage": Value::Object(usage_map),
-            "Company": Value::Object(company_map)
+            "Usage": usage_map,
+            "Company": company_map
         },
         "Score": {
-            "IP2LOCATION": number_string_or_null(ip2l_score),
-            "SCAMALYTICS": number_string_or_null(scam_score),
-            "ipapi": number_string_or_null(ipapi_score),
-            "AbuseIPDB": number_string_or_null(abuse_score),
-            "IPQS": number_string_or_null(ipqs_score),
+            "IP2LOCATION": score_string_or_null(ip2l_score),
+            "SCAMALYTICS": score_string_or_null(scam_score),
+            "ipapi": percent_score_or_null(ipapi_score),
+            "AbuseIPDB": score_string_or_null(abuse_score),
+            "IPQS": score_string_or_null(ipqs_score),
             "DBIP": dbip_risk
         },
         "Factor": {
@@ -1381,57 +1824,73 @@ async fn run_ip_check() -> Result<String, String> {
                 "DBIP": dbip_country
             },
             "Proxy": {
-                "scamalytics": bool_or_null(scam_is_proxy),
-                "ipregistry": bool_or_null(reg_proxy),
+                "IP2LOCATION": bool_or_null(ip2l_proxy),
                 "ipapi": bool_or_null(ipapi_proxy),
+                "ipregistry": bool_or_null(reg_proxy),
+                "IPQS": ipqs_proxy,
+                "SCAMALYTICS": bool_or_null(scam_is_proxy),
                 "ipdata": bool_or_null(ipdata_proxy),
                 "IPinfo": bool_or_null(iio_proxy),
-                "IPQS": ipqs_proxy,
+                "IPWHOIS": Value::Null,
                 "DBIP": dbip_proxy
             },
             "Tor": {
-                "scamalytics": bool_or_null(scam_is_tor),
-                "ipregistry": bool_or_null(reg_tor),
+                "IP2LOCATION": bool_or_null(ip2l_tor),
                 "ipapi": bool_or_null(ipapi_tor),
-                "AbuseIPDB": bool_or_null(abuse_is_tor),
+                "ipregistry": bool_or_null(reg_tor),
+                "IPQS": ipqs_tor,
+                "SCAMALYTICS": bool_or_null(scam_is_tor),
                 "ipdata": bool_or_null(ipdata_tor),
                 "IPinfo": bool_or_null(iio_tor),
-                "IPQS": ipqs_tor
+                "IPWHOIS": Value::Null,
+                "DBIP": Value::Null
             },
             "VPN": {
-                "scamalytics": bool_or_null(scam_is_vpn),
-                "ipregistry": bool_or_null(reg_vpn),
+                "IP2LOCATION": bool_or_null(ip2l_vpn),
                 "ipapi": bool_or_null(ipapi_vpn),
+                "ipregistry": bool_or_null(reg_vpn),
+                "IPQS": ipqs_vpn,
+                "SCAMALYTICS": bool_or_null(scam_is_vpn),
+                "ipdata": Value::Null,
                 "IPinfo": bool_or_null(iio_vpn),
-                "IPQS": ipqs_vpn
+                "IPWHOIS": Value::Null,
+                "DBIP": Value::Null
             },
             "Server": {
-                "scamalytics": bool_or_null(scam_is_dc),
-                "ipregistry": bool_or_null(reg_server),
+                "IP2LOCATION": bool_or_null(ip2l_server),
                 "ipapi": bool_or_null(ipapi_dc),
+                "ipregistry": bool_or_null(reg_server),
+                "IPQS": Value::Null,
+                "SCAMALYTICS": bool_or_null(scam_is_dc),
                 "ipdata": bool_or_null(ipdata_dc),
                 "IPinfo": bool_or_null(iio_hosting),
-                "IPQS": Value::Null,
+                "IPWHOIS": Value::Null,
                 "DBIP": Value::Null
             },
             "Abuser": {
-                "scamalytics": bool_or_null(scam_is_blacklisted),
-                "ipregistry": bool_or_null(reg_abuser),
+                "IP2LOCATION": bool_or_null(ip2l_abuser),
                 "ipapi": bool_or_null(ipapi_abuser),
-                "ipdata": ipdata_abuser,
+                "ipregistry": bool_or_null(reg_abuser),
                 "IPQS": ipqs_abuser,
+                "SCAMALYTICS": bool_or_null(scam_is_blacklisted),
+                "ipdata": ipdata_abuser,
+                "IPinfo": Value::Null,
+                "IPWHOIS": Value::Null,
                 "DBIP": dbip_abuser
             },
             "Robot": {
-                "scamalytics": scam_robot,
+                "IP2LOCATION": bool_or_null(ip2l_robot),
                 "ipapi": bool_or_null(ipapi_crawler),
                 "IPQS": ipqs_robot,
+                "SCAMALYTICS": scam_robot,
+                "ipdata": Value::Null,
+                "IPinfo": Value::Null,
+                "IPWHOIS": Value::Null,
                 "DBIP": dbip_robot
             }
         },
         "Media": {
             "TikTok": { "Status": tt_status, "Region": tt_region, "Type": tt_type },
-            "Bilibili": { "Status": bl_status, "Region": Value::Null, "Type": Value::Null },
             "DisneyPlus": { "Status": dp_status, "Region": dp_region, "Type": dp_type },
             "Netflix": { "Status": nf_status, "Region": nf_region, "Type": nf_type },
             "Youtube": { "Status": yt_status, "Region": yt_region, "Type": yt_type },
@@ -1453,7 +1912,7 @@ async fn run_ip_check() -> Result<String, String> {
             "163": mail163,
             "Sohu": sohu,
             "Sina": sina,
-            "DNSBlacklist": { "Total": null, "Clean": null, "Marked": null, "Blacklisted": null }
+            "DNSBlacklist": dnsbl
         }
     });
 
