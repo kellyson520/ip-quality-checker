@@ -570,6 +570,19 @@ async fn check_bilibili() -> (String, Value, Value) {
     }
 }
 
+/// Check raw TCP connectivity with a 5-second timeout (mobile only)
+#[cfg(mobile)]
+async fn check_tcp_connect(addr: &str) -> bool {
+    matches!(
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            tokio::net::TcpStream::connect(addr),
+        )
+        .await,
+        Ok(Ok(_))
+    )
+}
+
 /// Check SMTP port 25 connectivity (matching ip.sh's nc-based check)
 #[cfg(mobile)]
 async fn check_smtp_port25(ip: &str) -> Value {
@@ -582,7 +595,6 @@ async fn check_smtp_port25(ip: &str) -> Value {
         ).await {
             Ok(Ok(stream)) => {
                 // Try to read 220 banner
-                let mut buf = [0u8; 1024];
                 let readable = stream.readable().await;
                 if readable.is_ok() {
                     return Value::String("可用".into());
@@ -1042,12 +1054,12 @@ async fn run_ip_check() -> Result<String, String> {
                 "IP2LOCATION": ip2l_country != "null" && !ip2l_country.is_empty(),
                 "ipapi": ipapi_country != "null" && !ipapi_country.is_empty(),
                 "ipregistry": reg_country != "null" && !reg_country.is_empty(),
-                "IPQS": ipqs_country.is_some(),
+                "IPQS": ipqs_country != Value::Null,
                 "SCAMALYTICS": scam_country != "null" && !scam_country.is_empty(),
                 "ipdata": ipdata_country != "null" && !ipdata_country.is_empty(),
                 "IPinfo": iio_country != "null" && !iio_country.is_empty(),
                 "IPWHOIS": false,
-                "DBIP": dbip_country.is_some()
+                "DBIP": dbip_country != Value::Null
             },
             "Proxy": {
                 "scamalytics": scam_is_proxy,
