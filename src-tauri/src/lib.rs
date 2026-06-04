@@ -218,6 +218,19 @@ async fn check_http_status(url: &str) -> u16 {
     }
 }
 
+/// Check raw TCP connectivity with a 5-second timeout (mobile only)
+#[cfg(mobile)]
+async fn check_tcp_connect(addr: &str) -> bool {
+    matches!(
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            tokio::net::TcpStream::connect(addr),
+        )
+        .await,
+        Ok(Ok(_))
+    )
+}
+
 /// Format current time as human-readable string (matching bash script format)
 #[cfg(mobile)]
 fn chrono_now() -> String {
@@ -339,6 +352,18 @@ async fn run_ip_check() -> Result<String, String> {
         check_http_status("https://chatgpt.com/")
     );
     let yn = |code: u16| -> &str { if code == 200 { "解锁" } else { "Block" } };
+
+    // Step 6: Check mail services concurrently via TCP connectivity
+    let (gmail, outlook, yahoo, apple, qq, mail163, sohu, sina) = tokio::join!(
+        check_tcp_connect("smtp.gmail.com:587"),
+        check_tcp_connect("smtp.office365.com:587"),
+        check_tcp_connect("smtp.mail.yahoo.com:587"),
+        check_tcp_connect("smtp.mail.me.com:587"),
+        check_tcp_connect("smtp.qq.com:587"),
+        check_tcp_connect("smtp.163.com:465"),
+        check_tcp_connect("smtp.sohu.com:465"),
+        check_tcp_connect("smtp.sina.com:465")
+    );
 
     // === Map API responses to bash script JSON format ===
 
@@ -564,6 +589,14 @@ async fn run_ip_check() -> Result<String, String> {
         },
         "Mail": {
             "Port25": null,
+            "Gmail": gmail,
+            "Outlook": outlook,
+            "Yahoo": yahoo,
+            "Apple": apple,
+            "QQ": qq,
+            "163": mail163,
+            "Sohu": sohu,
+            "Sina": sina,
             "DNSBlacklist": { "Total": null, "Clean": null, "Marked": null, "Blacklisted": null }
         }
     });
