@@ -1,4 +1,5 @@
 import { MapPin, Building2, Globe2, Wifi, Clock, Hash } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { IPReport } from '../types';
 
 interface Props {
@@ -7,7 +8,7 @@ interface Props {
   type: IPReport['Type'];
 }
 
-function InfoRow({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
+function InfoRow({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <div className="flex items-center gap-3 py-2">
       <Icon className="w-4 h-4 text-blue-400 shrink-0" />

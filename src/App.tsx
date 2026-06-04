@@ -27,7 +27,17 @@ export default function App() {
       setData(result);
       setStatus('done');
     } catch (err) {
-      setError(String(err));
+      const msg = String(err);
+      // User-friendly error: hide internal details, show actionable message
+      if (msg.includes('bash')) {
+        setError('未找到运行环境，请确保已安装 bash');
+      } else if (msg.includes('timeout') || msg.includes('Timeout')) {
+        setError('检测超时，请检查网络连接后重试');
+      } else if (msg.includes('network') || msg.includes('Network') || msg.includes('connect')) {
+        setError('网络连接失败，请检查网络后重试');
+      } else {
+        setError('检测失败，请稍后重试');
+      }
       setStatus('error');
     }
   }, []);

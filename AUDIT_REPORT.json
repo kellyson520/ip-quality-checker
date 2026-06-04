@@ -1,0 +1,344 @@
+{
+  "project": "IP Quality Checker",
+  "tech_stack": "Tauri v2 + React + TypeScript + Rust",
+  "audit_date": "2026-06-04",
+  "audit_findings": [
+    {
+      "id": "F1",
+      "severity": "critical",
+      "category": "type-safety",
+      "file": "src/types.ts",
+      "line": "13-16",
+      "description": "TypeScript 类型 `Type` 定义为 `{ Usage: Record<string, string>, Company: Record<string, string> }`，但 Mobile 端 Rust 输出的结构是 `{ Proxy: bool, VPN: bool, Tor: bool }`。Desktop bash 脚本输出 Usage/Company 子对象。两个平台的输出结构完全不同，类型定义只匹配 Desktop 端，Mobile 端会导致运行时崩溃。",
+      "fix_suggestion": "使用联合类型或可选字段兼容两个平台：`Type: { Usage?: Record<string, string>, Company?: Record<string, string>, Proxy?: boolean, VPN?: boolean, Tor?: boolean }`"
+    },
+    {
+      "id": "F2",
+      "severity": "critical",
+      "category": "type-safety",
+      "file": "src/types.ts",
+      "line": "17",
+      "description": "Score 类型为 `Record<string, string>`，但 Mobile 端 Rust 返回的 Score.Total 是 u32 数字类型（非字符串），而各子分数也是 JSON number。前端 `parseInt` 处理时会得到 NaN。",
+      "fix_suggestion": "将 Score 类型改为 `Record<string, string | number>` 并在前端统一用 `Number()` 转换。"
+    },
+    {
+      "id": "F3",
+      "severity": "critical",
+      "category": "type-safety",
+      "file": "src/types.ts",
+      "line": "25-33",
+      "description": "Media 类型定义为每项都有 `{ Result: string }`，但 Mobile 端 Rust 的 ChatGPT 输出是 `{ status: 'Y'|'N' }`，Netflix 是原始网页 JSON（fetch_json 会失败）。前端 StreamingStatus.tsx 第 45 行访问 `val.Result` 会得到 undefined。",
+      "fix_suggestion": "Mobile 端统一输出格式为 `{ Result: string }`，与 bash 脚本一致。或前端兼容多种字段名。"
+    },
+    {
+      "id": "F4",
+      "severity": "critical",
+      "category": "type-safety",
+      "file": "src/types.ts",
+      "line": "34",
+      "description": "Mail 类型为 `Record<string, { Status: string; Port: string }>`，但 bash 脚本输出结构完全不同：`{ Port25: true/false/null, ServiceName: true/false/null, DNSBlacklist: {...} }`。MailStatus 组件第 30/34 行访问 `val.Status` 和 `val.Port` 会得到 undefined。",
+      "fix_suggestion": "重新定义 Mail 类型匹配实际输出，或修改 bash 脚本 JSON 输出格式。"
+    },
+    {
+      "id": "F5",
+      "severity": "critical",
+      "category": "type-safety",
+      "file": "src/types.ts",
+      "line": "18-24",
+      "description": "Factor 类型定义为 `{ CountryCode: Record<string, boolean|null>, Proxy: ..., Tor: ..., VPN: ..., Abuser: ... }`，但 Mobile 端 Rust 输出为 `{ Proxy: string, VPN: string, Tor: string, Abuse: number }`，结构完全不同。前端 RiskFactors 组件直接调用 `Object.entries(factor.Proxy)` 会在 Mobile 端产生错误结果。",
+      "fix_suggestion": "Mobile 端输出结构需与 Desktop 端对齐，或使用条件渲染兼容两种格式。"
+    },
+    {
+      "id": "F6",
+      "severity": "high",
+      "category": "security",
+      "file": "src-tauri/src/lib.rs",
+      "line": "116-133",
+      "description": "`run_ip_check_with_args` 接受前端传入的 `Vec<String>` 参数，直接作为 bash `-s` 模式的位置参数传递。虽然脚本是内嵌的，但参数中可包含 shell 元字符（如 `;rm -rf /`），bash 可能解释这些字符。这是潜在的命令注入向量。",
+      "fix_suggestion": "对 args 进行白名单验证，只允许预定义的安全参数（如 `-j`, `-n`, `-y`, `-l` 等）。禁止传递任意字符串给 bash。"
+    },
+    {
+      "id": "F7",
+      "severity": "high",
+      "category": "logic",
+      "file": "src-tauri/src/lib.rs",
+      "line": "188-204",
+      "description": "Mobile 端 Netflix 检测用 `fetch_json` 请求 Netflix 页面，但 Netflix 返回的是 HTML 而非 JSON，`fetch_json` 中 `serde_json::from_str` 会失败，被 `unwrap_or(json!({}))` 吞掉。ChatGPT 检测返回 `{ status: 'Y' }` 而非 `{ Result: '...' }`，与前端期望不符。",
+      "fix_suggestion": "Netflix 改用 HTTP 状态码判断（类似 ChatGPT），并统一输出格式为 `{ Result: string }`。"
+    },
+    {
+      "id": "F8",
+      "severity": "high",
+      "category": "performance",
+      "file": "src-tauri/src/lib.rs",
+      "line": "137-141",
+      "description": "Mobile 端 `fetch_json` 每次调用都创建新的 `reqwest::Client`（共调用 6-8 次），导致 TCP 连接无法复用，增加延迟和资源消耗。",
+      "fix_suggestion": "使用 `lazy_static` 或 `once_cell` 创建全局共享的 HTTP Client 实例。"
+    },
+    {
+      "id": "F9",
+      "severity": "high",
+      "category": "performance",
+      "file": "src-tauri/src/lib.rs",
+      "line": "95, 160",
+      "description": "Desktop 端 `run_ip_check` 标记为 `async fn` 但内部调用 `child.wait_with_output()` 是同步阻塞操作，会阻塞 Tauri 的 tokio 运行时线程。Mobile 端的多个 `fetch_json` 调用也是顺序执行，未利用并发。",
+      "fix_suggestion": "Desktop 端使用 `tokio::task::spawn_blocking` 包装同步子进程调用。Mobile 端用 `tokio::join!` 或 `futures::join_all` 并发请求。"
+    },
+    {
+      "id": "F10",
+      "severity": "medium",
+      "category": "security",
+      "file": "src-tauri/scripts/ip.sh",
+      "line": "2244, 2246",
+      "description": "bash 脚本中使用 `eval \"bash <(curl ...)\"` 模式执行远程脚本，存在供应链攻击风险。虽然这是在用户交互场景下，但在 Tauri 桌面应用中不会触发这些路径。",
+      "fix_suggestion": "确认 Tauri 调用时 `-j -n -y` 参数不会触发 eval 路径。建议移除或隔离远程脚本执行功能。"
+    },
+    {
+      "id": "F11",
+      "severity": "medium",
+      "category": "security",
+      "file": "src-tauri/scripts/ip.sh",
+      "line": "2608",
+      "description": "bash 脚本将用户 IP 检测报告上传到 `https://upload.check.place`，包含完整的 IP 地址、地理位置、ASN 等敏感信息。Tauri 调用时使用 `-y` 参数（privacy 模式）可禁用，但默认行为存在隐私泄露风险。",
+      "fix_suggestion": "确保 Tauri 调用始终传递 `-y` 标志禁用上传。在 lib.rs 第 97 行已传入 `-y`，但 `run_ip_check_with_args` 不保证。"
+    },
+    {
+      "id": "F12",
+      "severity": "medium",
+      "category": "logic",
+      "file": "src-tauri/src/lib.rs",
+      "line": "249-254",
+      "description": "Mobile 端 `calculate_score` 使用简单算术平均 `(a+b+c)/3`，但注释说是「加权平均」。当某个 API 返回错误（默认 0）时会严重拉低总分，结果不准确。",
+      "fix_suggestion": "实现真正的加权平均，或在某个数据源缺失时排除其分数（只对有效分数求平均）。"
+    },
+    {
+      "id": "F13",
+      "severity": "medium",
+      "category": "ux",
+      "file": "src/components/RiskScore.tsx",
+      "line": "3-6",
+      "description": "风险评分 >=80 显示绿色（emerald），<50 显示红色。对于「风险评分」，高分应代表高风险（红色），当前颜色逻辑与「风险」语义相反。如果前端是「质量分」，则 UI 标题应改为「质量评分」。",
+      "fix_suggestion": "明确分数语义：若为风险分则反转颜色，若为质量分则改标题为「质量评分」。"
+    },
+    {
+      "id": "F14",
+      "severity": "medium",
+      "category": "cross-platform",
+      "file": "src-tauri/src/lib.rs",
+      "line": "239-246",
+      "description": "Mobile 端 `chrono_now()` 返回 Unix 时间戳（如 `1717500000`），而 bash 脚本返回人类可读格式。StatusBar 组件直接显示此值，Mobile 端会显示为无意义的数字。",
+      "fix_suggestion": "Mobile 端格式化为与 bash 脚本一致的日期时间字符串。"
+    },
+    {
+      "id": "F15",
+      "severity": "low",
+      "category": "type-safety",
+      "file": "src/components/IPInfoCard.tsx",
+      "line": "10",
+      "description": "`icon` prop 类型为 `any`，绕过了 TypeScript 类型检查。",
+      "fix_suggestion": "改为 `icon: React.ComponentType<{ className?: string }>` 或使用 lucide-react 的 `LucideIcon` 类型。"
+    },
+    {
+      "id": "F16",
+      "severity": "low",
+      "category": "ux",
+      "file": "src/components/IPInfoCard.tsx",
+      "line": "86",
+      "description": "App.tsx 第 86 行 `<IPInfoCard type={data.Type}>` 中 `type` 是 JavaScript 保留字/关键字，虽然作为 JSX prop 可用但容易混淆。",
+      "fix_suggestion": "将 prop 名改为 `typeInfo` 或 `ipType`。"
+    },
+    {
+      "id": "F17",
+      "severity": "low",
+      "category": "logic",
+      "file": "src/App.tsx",
+      "line": "29-30",
+      "description": "错误处理直接 `String(err)` 显示给用户，可能暴露内部错误路径和技术细节。",
+      "fix_suggestion": "对错误信息进行用户友好的格式化，隐藏技术细节。"
+    },
+    {
+      "id": "F18",
+      "severity": "low",
+      "category": "ux",
+      "file": "src/components/LoadingSpinner.tsx",
+      "line": "3",
+      "description": "LoadingSpinner 组件接受 `text` prop 但 App.tsx 调用时未传递，始终显示默认文本。对于长时间运行的 IP 检测，缺乏进度反馈。",
+      "fix_suggestion": "考虑在检测过程中显示进度步骤或预估时间。"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "T1",
+      "description": "【紧急】统一跨平台 JSON 输出格式 — Mobile 端 Rust 代码输出结构必须与 bash 脚本的 JSON 格式完全一致，确保前端可以统一处理",
+      "files": [
+        "src-tauri/src/lib.rs"
+      ],
+      "do_not_touch": [
+        "src-tauri/scripts/ip.sh"
+      ],
+      "depends": [],
+      "priority": "critical"
+    },
+    {
+      "id": "T2",
+      "description": "【紧急】修正 types.ts 类型定义 — 根据 bash 脚本的实际 JSON 输出结构重写 IPReport 类型，确保所有字段类型匹配",
+      "files": [
+        "src/types.ts"
+      ],
+      "do_not_touch": [
+        "src-tauri/scripts/ip.sh",
+        "src-tauri/src/lib.rs"
+      ],
+      "depends": ["T1"],
+      "priority": "critical"
+    },
+    {
+      "id": "T3",
+      "description": "【紧急】修复所有前端组件的类型访问 — 确保 IPInfoCard/RiskFactors/StreamingStatus/MailStatus/RiskScore 等组件访问的字段路径与实际 JSON 结构匹配",
+      "files": [
+        "src/components/IPInfoCard.tsx",
+        "src/components/RiskFactors.tsx",
+        "src/components/StreamingStatus.tsx",
+        "src/components/MailStatus.tsx",
+        "src/components/RiskScore.tsx"
+      ],
+      "do_not_touch": [
+        "src-tauri/scripts/ip.sh"
+      ],
+      "depends": ["T2"],
+      "priority": "critical"
+    },
+    {
+      "id": "T4",
+      "description": "【重要】修复 run_ip_check_with_args 命令注入风险 — 对传入参数进行白名单验证",
+      "files": [
+        "src-tauri/src/lib.rs"
+      ],
+      "do_not_touch": [
+        "src-tauri/scripts/ip.sh"
+      ],
+      "depends": [],
+      "priority": "important"
+    },
+    {
+      "id": "T5",
+      "description": "【重要】Mobile 端 HTTP Client 连接复用 — 使用全局共享 Client 替代每次创建新实例",
+      "files": [
+        "src-tauri/src/lib.rs"
+      ],
+      "do_not_touch": [
+        "src-tauri/scripts/ip.sh"
+      ],
+      "depends": [],
+      "priority": "important"
+    },
+    {
+      "id": "T6",
+      "description": "【重要】修复 async 阻塞问题 — Desktop 端 spawn_blocking 包装同步子进程，Mobile 端并发请求",
+      "files": [
+        "src-tauri/src/lib.rs"
+      ],
+      "do_not_touch": [
+        "src-tauri/scripts/ip.sh"
+      ],
+      "depends": [],
+      "priority": "important"
+    },
+    {
+      "id": "T7",
+      "description": "【重要】Mobile 端 Netflix/ChatGPT 检测修复 — Netflix 不应用 fetch_json，ChatGPT 输出格式需统一",
+      "files": [
+        "src-tauri/src/lib.rs"
+      ],
+      "do_not_touch": [
+        "src-tauri/scripts/ip.sh"
+      ],
+      "depends": ["T1"],
+      "priority": "important"
+    },
+    {
+      "id": "T8",
+      "description": "【重要】修复评分颜色逻辑 — 明确分数语义（风险分 vs 质量分），修正颜色映射",
+      "files": [
+        "src/components/RiskScore.tsx"
+      ],
+      "do_not_touch": [],
+      "depends": ["T3"],
+      "priority": "important"
+    },
+    {
+      "id": "T9",
+      "description": "【重要】修复 calculate_score — 缺失数据源时排除而非默认 0，实现真正的加权平均",
+      "files": [
+        "src-tauri/src/lib.rs"
+      ],
+      "do_not_touch": [],
+      "depends": ["T1"],
+      "priority": "important"
+    },
+    {
+      "id": "T10",
+      "description": "【一般】Mobile 端时间格式化 — chrono_now() 改为输出人类可读日期时间",
+      "files": [
+        "src-tauri/src/lib.rs"
+      ],
+      "do_not_touch": [],
+      "depends": [],
+      "priority": "minor"
+    },
+    {
+      "id": "T11",
+      "description": "【一般】TypeScript 类型改进 — icon prop 用具体类型替代 any，type prop 改名",
+      "files": [
+        "src/components/IPInfoCard.tsx",
+        "src/App.tsx"
+      ],
+      "do_not_touch": [],
+      "depends": ["T3"],
+      "priority": "minor"
+    },
+    {
+      "id": "T12",
+      "description": "【一般】UX 改进 — 错误信息用户友好化，LoadingSpinner 增加进度反馈",
+      "files": [
+        "src/App.tsx",
+        "src/components/LoadingSpinner.tsx"
+      ],
+      "do_not_touch": [],
+      "depends": [],
+      "priority": "minor"
+    }
+  ],
+  "dependency_graph": {
+    "T1": { "depends": [], "blocks": ["T2", "T7", "T9"] },
+    "T2": { "depends": ["T1"], "blocks": ["T3"] },
+    "T3": { "depends": ["T2"], "blocks": ["T8", "T11"] },
+    "T4": { "depends": [], "blocks": [] },
+    "T5": { "depends": [], "blocks": [] },
+    "T6": { "depends": [], "blocks": [] },
+    "T7": { "depends": ["T1"], "blocks": [] },
+    "T8": { "depends": ["T3"], "blocks": [] },
+    "T9": { "depends": ["T1"], "blocks": [] },
+    "T10": { "depends": [], "blocks": [] },
+    "T11": { "depends": ["T3"], "blocks": [] },
+    "T12": { "depends": [], "blocks": [] }
+  },
+  "execution_order": [
+    "Phase 1 (可并行): T1, T4, T5, T6, T10, T12",
+    "Phase 2 (依赖 T1): T2, T7, T9",
+    "Phase 3 (依赖 T2): T3",
+    "Phase 4 (依赖 T3): T8, T11"
+  ],
+  "summary": {
+    "total_findings": 18,
+    "critical": 5,
+    "high": 4,
+    "medium": 5,
+    "low": 4,
+    "total_tasks": 12,
+    "critical_tasks": 3,
+    "important_tasks": 6,
+    "minor_tasks": 3,
+    "core_issue": "Mobile 端 Rust 代码与 bash 脚本输出的 JSON 结构完全不同，而 TypeScript 类型定义只匹配 bash 脚本输出，导致 Mobile 端运行时前端会因字段访问错误而崩溃。这是最核心的问题，修复 T1→T2→T3 的链条是最优先事项。"
+  }
+}

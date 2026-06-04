@@ -1,5 +1,9 @@
 export interface IPReport {
-  Head: { IP: string; Time: string; Version: string };
+  Head: {
+    IP: string;
+    Time: string;
+    Version: string;
+  };
   Info: {
     ASN: string;
     Organization: string;
@@ -16,20 +20,12 @@ export interface IPReport {
   };
   Score: Record<string, string>;
   Factor: {
-    CountryCode: Record<string, string>;
+    CountryCode: Record<string, boolean>;
     Proxy: Record<string, boolean | null>;
     Tor: Record<string, boolean | null>;
     VPN: Record<string, boolean | null>;
     Abuser: Record<string, boolean | null>;
   };
-  Media: {
-    TikTok: { Result: string };
-    DisneyPlus: { Result: string };
-    Netflix: { Result: string };
-    YouTube: { Result: string };
-    AmazonPrime: { Result: string };
-    Reddit: { Result: string };
-    ChatGPT: { Result: string };
-  };
+  Media: Record<string, { Result: string }>;
   Mail: Record<string, { Status: string; Port: string }>;
 }

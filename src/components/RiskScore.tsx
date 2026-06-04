@@ -1,23 +1,24 @@
 import type { IPReport } from '../types';
 
+// Risk score: higher = more risky → red. Lower = safer → green.
 function getScoreColor(score: number): string {
-  if (score >= 80) return 'bg-emerald-500';
-  if (score >= 50) return 'bg-amber-500';
+  if (score <= 20) return 'bg-emerald-500';
+  if (score <= 50) return 'bg-amber-500';
   return 'bg-red-500';
 }
 
 function getScoreTextColor(score: number): string {
-  if (score >= 80) return 'text-emerald-400';
-  if (score >= 50) return 'text-amber-400';
+  if (score <= 20) return 'text-emerald-400';
+  if (score <= 50) return 'text-amber-400';
   return 'text-red-400';
 }
 
 function getScoreLabel(score: number): string {
-  if (score >= 90) return '优秀';
-  if (score >= 80) return '良好';
-  if (score >= 60) return '一般';
-  if (score >= 40) return '较差';
-  return '高风险';
+  if (score <= 10) return '极低风险';
+  if (score <= 20) return '低风险';
+  if (score <= 50) return '中等风险';
+  if (score <= 80) return '高风险';
+  return '极高风险';
 }
 
 function ScoreBar({ label, value }: { label: string; value: string }) {
@@ -54,7 +55,7 @@ export default function RiskScore({ score }: { score: IPReport['Score'] }) {
               <circle cx="60" cy="60" r="52" fill="none" stroke="#334155" strokeWidth="10" />
               <circle
                 cx="60" cy="60" r="52" fill="none"
-                stroke={totalScore >= 80 ? '#10b981' : totalScore >= 50 ? '#f59e0b' : '#ef4444'}
+                stroke={totalScore <= 20 ? '#10b981' : totalScore <= 50 ? '#f59e0b' : '#ef4444'}
                 strokeWidth="10"
                 strokeLinecap="round"
                 strokeDasharray={`${(totalScore / 100) * 326.7} 326.7`}

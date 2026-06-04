@@ -13,9 +13,9 @@ const SERVICE_CONFIG: Record<string, { emoji: string; name: string }> = {
 
 function resultBadge(result: string) {
   const lower = result.toLowerCase();
-  if (lower.includes('yes') || lower.includes('ok') || lower.includes('unlock') || lower.includes('原生'))
+  if (lower === 'y' || lower.includes('yes') || lower.includes('ok') || lower.includes('unlock') || lower.includes('原生'))
     return <span className="badge-good text-xs px-2 py-0.5 rounded-full">解锁</span>;
-  if (lower.includes('no') || lower.includes('block') || lower.includes('denied'))
+  if (lower === 'n' || lower.includes('no') || lower.includes('block') || lower.includes('denied'))
     return <span className="badge-bad text-xs px-2 py-0.5 rounded-full">锁定</span>;
   return <span className="badge-warn text-xs px-2 py-0.5 rounded-full">{result}</span>;
 }
