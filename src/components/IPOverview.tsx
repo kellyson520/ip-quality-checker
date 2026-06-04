@@ -12,6 +12,12 @@ export default function IPOverview({ head, info, type }: Props) {
     .filter((value) => value !== null && value !== undefined && value !== '' && value !== 'null')
     .map(String);
   const usage = usageValues.join(', ') || info.Type || '-';
+  const infoType = info.Type || '-';
+  const infoTypeBadgeClass = info.Type?.includes('本土')
+    ? 'badge badge-green'
+    : info.Type?.includes('海外')
+      ? 'badge badge-amber'
+      : 'badge badge-gray';
   const coordinates =
     info.Latitude && info.Longitude && info.Latitude !== 'null' && info.Longitude !== 'null'
       ? `${info.Latitude}, ${info.Longitude}`
@@ -36,6 +42,10 @@ export default function IPOverview({ head, info, type }: Props) {
             <span className="data-value">{value}</span>
           </div>
         ))}
+        <div className="flex items-baseline gap-2 sm:flex-col sm:gap-0.5">
+          <span className="data-label whitespace-nowrap shrink-0 w-8 sm:w-auto">地址类型</span>
+          <span className={`data-value ${infoTypeBadgeClass}`}>{infoType}</span>
+        </div>
       </div>
     </div>
   );
