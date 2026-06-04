@@ -319,7 +319,7 @@ async fn run_ip_check() -> Result<String, String> {
         check_http_status("https://www.reddit.com/"),
         check_http_status("https://chatgpt.com/")
     );
-    let yn = |code: u16| -> &str { if code == 200 { "Y" } else { "N" } };
+    let yn = |code: u16| -> &str { if code == 200 { "解锁" } else { "Block" } };
 
     // === Map API responses to bash script JSON format ===
 
@@ -439,18 +439,17 @@ async fn run_ip_check() -> Result<String, String> {
             }
         },
         "Media": {
-            "TikTok": { "Result": "N" },
-            "DisneyPlus": { "Result": yn(dp) },
-            "Netflix": { "Result": yn(nf) },
-            "YouTube": { "Result": yn(yt) },
-            "AmazonPrime": { "Result": yn(am) },
-            "Reddit": { "Result": yn(rd) },
-            "ChatGPT": { "Result": yn(gp) }
+            "TikTok": { "Status": "Block" },
+            "DisneyPlus": { "Status": yn(dp) },
+            "Netflix": { "Status": yn(nf) },
+            "Youtube": { "Status": yn(yt) },
+            "AmazonPrimeVideo": { "Status": yn(am) },
+            "Reddit": { "Status": yn(rd) },
+            "ChatGPT": { "Status": yn(gp) }
         },
         "Mail": {
-            "Port25": { "Status": "unknown", "Port": "25" },
-            "ServiceName": { "Status": "unknown", "Port": "53" },
-            "DNSBlacklist": { "Status": "unknown", "Port": "25" }
+            "Port25": null,
+            "DNSBlacklist": { "Total": null, "Clean": null, "Marked": null, "Blacklisted": null }
         }
     });
 

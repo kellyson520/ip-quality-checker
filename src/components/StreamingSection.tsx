@@ -4,19 +4,23 @@ const SERVICES: Record<string, string> = {
   TikTok: 'TikTok',
   DisneyPlus: 'Disney+',
   Netflix: 'Netflix',
-  YouTube: 'YouTube',
-  AmazonPrime: 'Prime Video',
+  Youtube: 'YouTube',
+  AmazonPrimeVideo: 'Prime Video',
   Reddit: 'Reddit',
   ChatGPT: 'ChatGPT',
 };
 
-function Badge({ result }: { result: string }) {
-  const r = result.toLowerCase();
-  if (r === 'y' || r.includes('yes') || r.includes('ok') || r.includes('unlock'))
-    return <span className="badge badge-green">解锁</span>;
-  if (r === 'n' || r.includes('no') || r.includes('block') || r.includes('denied'))
-    return <span className="badge badge-red">锁定</span>;
-  return <span className="badge badge-gray">{result}</span>;
+function Badge({ status }: { status: string }) {
+  const s = status.trim().toLowerCase();
+  if (!s || s === 'null' || s === 'nodata')
+    return <span className="badge badge-gray">-</span>;
+  if (s.includes('解锁') || s.includes('yes') || s.includes('ok') || s.includes('unlock'))
+    return <span className="badge badge-green">{status.trim()}</span>;
+  if (s.includes('block') || s.includes('锁定') || s.includes('no') || s.includes('denied') || s.includes('china'))
+    return <span className="badge badge-red">{status.trim()}</span>;
+  if (s.includes('idc') || s.includes('pending') || s.includes('noprem') || s.includes('nf.only') || s.includes('webonly') || s.includes('apponly'))
+    return <span className="badge badge-amber">{status.trim()}</span>;
+  return <span className="badge badge-gray">{status.trim()}</span>;
 }
 
 export default function StreamingSection({ media }: { media: IPReport['Media'] }) {
@@ -30,7 +34,7 @@ export default function StreamingSection({ media }: { media: IPReport['Media'] }
         {entries.map(([key, val]) => (
           <div key={key} className="flex items-center justify-between py-1.5 px-3 rounded bg-[#1f1f1f]">
             <span className="text-[13px] text-[#ccc]">{SERVICES[key] || key}</span>
-            <Badge result={val.Result} />
+            <Badge status={val.Status} />
           </div>
         ))}
       </div>

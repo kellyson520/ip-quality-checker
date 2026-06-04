@@ -12,6 +12,7 @@ export interface IPReport {
     City: { Name: string };
     Region: { Code: string; Name: string };
     Continent: { Code: string; Name: string };
+    RegisteredRegion?: { Code: string; Name: string };
     Type: string;
   };
   Type: {
@@ -20,12 +21,27 @@ export interface IPReport {
   };
   Score: Record<string, string>;
   Factor: {
-    CountryCode: Record<string, boolean>;
+    CountryCode: Record<string, boolean | string | null>;
     Proxy: Record<string, boolean | null>;
     Tor: Record<string, boolean | null>;
     VPN: Record<string, boolean | null>;
-    Abuser: Record<string, boolean | null>;
+    Server?: Record<string, boolean | null>;
+    Abuser?: Record<string, boolean | null>;
+    Robot?: Record<string, boolean | null>;
   };
-  Media: Record<string, { Result: string }>;
-  Mail: Record<string, { Status: string; Port: string }>;
+  Media: Record<string, {
+    Status: string;
+    Region?: string;
+    Type?: string;
+  }>;
+  Mail: {
+    Port25?: boolean | null;
+    DNSBlacklist?: {
+      Total?: number;
+      Clean?: number;
+      Marked?: number;
+      Blacklisted?: number;
+    };
+    [service: string]: unknown;
+  };
 }
