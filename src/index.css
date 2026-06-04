@@ -63,6 +63,20 @@
     @apply bg-white text-black text-sm font-medium px-4 sm:px-5 py-1.5 sm:py-2 rounded-md 
            hover:bg-[#e5e5e5] active:bg-[#ccc] transition-colors duration-150;
   }
+  .app-header {
+    padding-top: calc(0.625rem + env(safe-area-inset-top, 0px));
+    padding-bottom: 0.625rem;
+  }
+  .app-footer {
+    padding-bottom: calc(0.625rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  @screen sm {
+    .app-header {
+      padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+      padding-bottom: 0.75rem;
+    }
+  }
 }
 
 @layer utilities {

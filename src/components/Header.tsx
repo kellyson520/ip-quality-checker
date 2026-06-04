@@ -8,7 +8,7 @@ interface HeaderProps {
 
 export default function Header({ onRun, loading, ip }: HeaderProps) {
   return (
-    <header className="flex items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 border-b border-[#2a2a2a]">
+    <header className="app-header flex items-center justify-between px-3 sm:px-5 border-b border-[#2a2a2a]">
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <span className="text-sm font-semibold text-white tracking-tight shrink-0">IPQC</span>
         {ip && <span className="text-[12px] sm:text-[13px] text-[#666] font-mono truncate">{ip}</span>}

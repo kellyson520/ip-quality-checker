@@ -82,7 +82,7 @@ export default function App() {
         )}
       </main>
 
-      <footer className="flex items-center justify-between px-3 sm:px-5 py-2.5 border-t border-[#2a2a2a] text-[10px] sm:text-[11px] text-[#444] max-w-[960px] w-full mx-auto">
+      <footer className="app-footer flex items-center justify-between px-3 sm:px-5 pt-2.5 border-t border-[#2a2a2a] text-[10px] sm:text-[11px] text-[#444] max-w-[960px] w-full mx-auto">
         <span>
           {status === 'done'
             ? `检测完成${durationMs ? ` · ${(durationMs / 1000).toFixed(1)}s` : ''}`
