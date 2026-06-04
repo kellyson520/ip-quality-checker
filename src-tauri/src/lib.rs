@@ -201,6 +201,8 @@ fn jbool(v: &Value, path: &[&str]) -> bool {
 async fn fetch_json(url: &str) -> Result<Value, String> {
     let resp = get_client()
         .get(url)
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
+        .header("Accept", "application/json")
         .send()
         .await
         .map_err(|e| format!("Request failed: {}", e))?;
@@ -209,6 +211,11 @@ async fn fetch_json(url: &str) -> Result<Value, String> {
         .text()
         .await
         .map_err(|e| format!("Read response failed: {}", e))?;
+
+    // Check if response is HTML (Cloudflare block)
+    if text.starts_with("<!DOCTYPE") || text.starts_with("<html") {
+        return Err("Blocked by Cloudflare".to_string());
+    }
 
     serde_json::from_str(&text).map_err(|e| {
         format!(
@@ -219,10 +226,81 @@ async fn fetch_json(url: &str) -> Result<Value, String> {
     })
 }
 
+/// Fetch maxmind data with fallback (mobile only)
+#[cfg(mobile)]
+async fn fetch_maxmind(ip: &str) -> Value {
+    // Try primary API: ipinfo.check.place
+    let primary_url = format!("https://ipinfo.check.place/{}?lang=zh-CN", ip);
+    if let Ok(data) = fetch_json(&primary_url).await {
+        if !data.is_null() && data.is_object() {
+            return data;
+        }
+    }
+
+    // Fallback 1: Try without lang parameter
+    let fallback1_url = format!("https://ipinfo.check.place/{}", ip);
+    if let Ok(data) = fetch_json(&fallback1_url).await {
+        if !data.is_null() && data.is_object() {
+            return data;
+        }
+    }
+
+    // Fallback 2: Use ipapi.co (free API)
+    let fallback2_url = format!("https://ipapi.co/{}/json/", ip);
+    if let Ok(data) = fetch_json(&fallback2_url).await {
+        if !data.is_null() && data.is_object() {
+            // Convert ipapi.co format to maxmind format
+            return serde_json::json!({
+                "ASN": {
+                    "AutonomousSystemNumber": data["asn"].as_str().unwrap_or("").replace("AS", "").parse::<u64>().unwrap_or(0),
+                    "AutonomousSystemOrganization": data["org"].as_str().unwrap_or("")
+                },
+                "City": {
+                    "Name": data["city"].as_str().unwrap_or(""),
+                    "PostalCode": data["postal"].as_str().unwrap_or(""),
+                    "Latitude": data["latitude"].as_f64().unwrap_or(0.0),
+                    "Longitude": data["longitude"].as_f64().unwrap_or(0.0),
+                    "AccuracyRadius": 0,
+                    "Continent": {
+                        "Code": "",
+                        "Name": data["continent_code"].as_str().unwrap_or("")
+                    },
+                    "Country": {
+                        "IsoCode": data["country_code"].as_str().unwrap_or(""),
+                        "Name": data["country_name"].as_str().unwrap_or("")
+                    },
+                    "Subdivisions": [{
+                        "IsoCode": data["region_code"].as_str().unwrap_or(""),
+                        "Name": data["region"].as_str().unwrap_or("")
+                    }],
+                    "Location": {
+                        "TimeZone": data["timezone"].as_str().unwrap_or("")
+                    }
+                },
+                "Country": {
+                    "IsoCode": data["country_code"].as_str().unwrap_or(""),
+                    "Name": data["country_name"].as_str().unwrap_or(""),
+                    "RegisteredCountry": {
+                        "IsoCode": data["country_code"].as_str().unwrap_or(""),
+                        "Name": data["country_name"].as_str().unwrap_or("")
+                    }
+                }
+            });
+        }
+    }
+
+    // All APIs failed, return empty object
+    serde_json::json!({})
+}
+
 /// Fetch text/HTTP status from URL (mobile only, for non-JSON endpoints)
 #[cfg(mobile)]
 async fn check_http_status(url: &str) -> u16 {
-    match get_client().get(url).send().await {
+    match get_client()
+        .get(url)
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
+        .send()
+        .await {
         Ok(resp) => resp.status().as_u16(),
         Err(_) => 0,
     }
@@ -758,7 +836,7 @@ async fn run_ip_check() -> Result<String, String> {
     }
 
     // Step 2: Concurrent API requests (10 data sources matching ip.sh)
-    let info_url = format!("https://ipinfo.check.place/{}?lang=zh-CN", ip);
+    // Use fetch_maxmind for maxmind data (with fallback)
     let scam_url = format!("https://ipinfo.check.place/{}?db=scamalytics", ip);
     let abuse_url = format!("https://ipinfo.check.place/{}?db=abuseipdb", ip);
     let reg_url = format!("https://ipinfo.check.place/{}?db=ipregistry", ip);
@@ -768,8 +846,11 @@ async fn run_ip_check() -> Result<String, String> {
     let ipqs_url = format!("https://ipinfo.check.place/{}?db=ipqualityscore", ip);
     let ipinfo_url = format!("https://ipinfo.io/widget/demo/{}", ip);
 
-    let (info_r, scam_r, abuse_r, reg_r, ipapi_r, ip2l_r, ipdata_r, ipqs_r, ipinfo_r) = tokio::join!(
-        fetch_json(&info_url),
+    // Fetch maxmind data with fallback (separate call)
+    let info = fetch_maxmind(&ip).await;
+
+    // Fetch other APIs concurrently
+    let (scam_r, abuse_r, reg_r, ipapi_r, ip2l_r, ipdata_r, ipqs_r, ipinfo_r) = tokio::join!(
         fetch_json(&scam_url),
         fetch_json(&abuse_url),
         fetch_json(&reg_url),
@@ -780,7 +861,6 @@ async fn run_ip_check() -> Result<String, String> {
         fetch_json(&ipinfo_url)
     );
 
-    let info = info_r.unwrap_or(serde_json::json!({}));
     let scam = scam_r.unwrap_or(serde_json::json!({}));
     let abuse = abuse_r.unwrap_or(serde_json::json!({}));
     let reg = reg_r.unwrap_or(serde_json::json!({}));
