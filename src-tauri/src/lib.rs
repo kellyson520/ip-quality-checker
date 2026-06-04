@@ -415,21 +415,75 @@ async fn fetch_json(url: &str) -> Result<Value, String> {
 /// Fetch maxmind data with fallback (mobile only)
 #[cfg(mobile)]
 async fn fetch_maxmind(ip: &str) -> Value {
+    // Primary: ipinfo.check.place (带中文)
     let primary_url = format!("https://ipinfo.check.place/{}?lang=zh-CN", ip);
     if let Ok(data) = fetch_json(&primary_url).await {
         if !data.is_null() && data.is_object() {
+            eprintln!("[maxmind] primary OK");
             return data;
         }
     }
+    eprintln!("[maxmind] primary failed, trying fallback 1");
 
-    let fallback_url = format!("https://ipinfo.check.place/{}?lang=en", ip);
-    if let Ok(data) = fetch_json(&fallback_url).await {
+    // Fallback 1: ipinfo.check.place (英文)
+    let fallback1_url = format!("https://ipinfo.check.place/{}?lang=en", ip);
+    if let Ok(data) = fetch_json(&fallback1_url).await {
         if !data.is_null() && data.is_object() {
+            eprintln!("[maxmind] fallback1 OK");
             return data;
         }
     }
+    eprintln!("[maxmind] fallback1 failed, trying ipapi.co");
 
-    Value::Null
+    // Fallback 2: ipapi.co (免费 API，自动转换格式)
+    let fallback2_url = format!("https://ipapi.co/{}/json/", ip);
+    match fetch_json(&fallback2_url).await {
+        Ok(data) if !data.is_null() && data.is_object() => {
+            eprintln!("[maxmind] ipapi.co OK: city={}", data["city"].as_str().unwrap_or("?"));
+            let asn_str = data["asn"].as_str().unwrap_or("");
+            let asn_num = asn_str.replace("AS", "").parse::<u64>().unwrap_or(0);
+            serde_json::json!({
+                "ASN": {
+                    "AutonomousSystemNumber": asn_num,
+                    "AutonomousSystemOrganization": data["org"].as_str().unwrap_or("")
+                },
+                "City": {
+                    "Name": data["city"].as_str().unwrap_or(""),
+                    "PostalCode": data["postal"].as_str().unwrap_or(""),
+                    "Latitude": data["latitude"].as_f64().unwrap_or(0.0),
+                    "Longitude": data["longitude"].as_f64().unwrap_or(0.0),
+                    "AccuracyRadius": 0,
+                    "Continent": {
+                        "Code": data["continent_code"].as_str().unwrap_or(""),
+                        "Name": ""
+                    },
+                    "Country": {
+                        "IsoCode": data["country_code"].as_str().unwrap_or(""),
+                        "Name": data["country_name"].as_str().unwrap_or("")
+                    },
+                    "Subdivisions": [{
+                        "IsoCode": data["region_code"].as_str().unwrap_or(""),
+                        "Name": data["region"].as_str().unwrap_or("")
+                    }],
+                    "Location": {
+                        "TimeZone": data["timezone"].as_str().unwrap_or("")
+                    }
+                },
+                "Country": {
+                    "IsoCode": data["country_code"].as_str().unwrap_or(""),
+                    "Name": data["country_name"].as_str().unwrap_or(""),
+                    "RegisteredCountry": {
+                        "IsoCode": data["country_code"].as_str().unwrap_or(""),
+                        "Name": data["country_name"].as_str().unwrap_or("")
+                    }
+                }
+            })
+        }
+        _ => {
+            eprintln!("[maxmind] ALL APIs failed, returning empty");
+            serde_json::json!({})
+        }
+    }
 }
 
 /// Fetch text/HTTP status from URL (mobile only, for non-JSON endpoints)
