@@ -5,66 +5,65 @@
 @layer base {
   * {
     scrollbar-width: thin;
-    scrollbar-color: #334155 #0f172a;
+    scrollbar-color: #2a2a2a #111;
   }
   *::-webkit-scrollbar {
-    width: 6px;
+    width: 5px;
   }
   *::-webkit-scrollbar-track {
-    background: #0f172a;
+    background: transparent;
   }
   *::-webkit-scrollbar-thumb {
-    background-color: #334155;
+    background-color: #333;
     border-radius: 3px;
   }
   body {
-    @apply bg-[#0f172a] text-gray-200 font-sans antialiased;
+    @apply bg-[#111] text-[#e5e5e5] font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
   }
 }
 
 @layer components {
-  .card {
-    @apply bg-[#1e293b] border border-slate-700/50 rounded-xl p-5 transition-all duration-300 hover:border-slate-600/70 hover:shadow-lg hover:shadow-black/20;
+  .section {
+    @apply bg-[#191919] rounded-lg border border-[#2a2a2a];
   }
-  .badge-good {
-    @apply bg-emerald-500/20 text-emerald-400 border border-emerald-500/30;
+  .section-title {
+    @apply text-[11px] font-medium uppercase tracking-[0.08em] text-[#666] mb-3;
   }
-  .badge-warn {
-    @apply bg-amber-500/20 text-amber-400 border border-amber-500/30;
+  .data-label {
+    @apply text-[13px] text-[#666];
   }
-  .badge-bad {
-    @apply bg-red-500/20 text-red-400 border border-red-500/30;
+  .data-value {
+    @apply text-[13px] text-[#e5e5e5] font-medium;
   }
-  .badge-neutral {
-    @apply bg-slate-500/20 text-slate-400 border border-slate-500/30;
+  .badge {
+    @apply inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded;
   }
-  .gradient-text {
-    @apply bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent;
+  .badge-green {
+    @apply bg-[#0d2818] text-[#4ade80] border border-[#166534];
   }
-  .btn-primary {
-    @apply bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-300 hover:from-blue-400 hover:to-cyan-400 hover:shadow-lg hover:shadow-blue-500/25 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+  .badge-red {
+    @apply bg-[#2d0a0a] text-[#f87171] border border-[#7f1d1d];
+  }
+  .badge-amber {
+    @apply bg-[#2d1f0a] text-[#fbbf24] border border-[#78350f];
+  }
+  .badge-gray {
+    @apply bg-[#1f1f1f] text-[#888] border border-[#333];
+  }
+  .btn-run {
+    @apply bg-white text-black text-sm font-medium px-5 py-2 rounded-md 
+           hover:bg-[#e5e5e5] active:bg-[#ccc] transition-colors duration-150;
   }
 }
 
 @layer utilities {
-  @keyframes pulse-glow {
-    0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.3); }
-    50% { box-shadow: 0 0 40px rgba(59, 130, 246, 0.6); }
-  }
-  .animate-pulse-glow {
-    animation: pulse-glow 2s ease-in-out infinite;
-  }
   @keyframes fade-in {
-    from { opacity: 0; transform: translateY(10px); }
+    from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
   }
   .animate-fade-in {
-    animation: fade-in 0.5s ease-out forwards;
-  }
-  @keyframes spin-slow {
-    to { transform: rotate(360deg); }
-  }
-  .animate-spin-slow {
-    animation: spin-slow 3s linear infinite;
+    animation: fade-in 0.3s ease-out forwards;
   }
 }
