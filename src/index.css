@@ -6,6 +6,7 @@
   * {
     scrollbar-width: thin;
     scrollbar-color: #2a2a2a #111;
+    -webkit-tap-highlight-color: transparent;
   }
   *::-webkit-scrollbar {
     width: 5px;
@@ -22,23 +23,29 @@
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     -webkit-font-smoothing: antialiased;
   }
+  /* Prevent horizontal overflow on mobile */
+  html, body {
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 @layer components {
   .section {
     @apply bg-[#191919] rounded-lg border border-[#2a2a2a];
+    min-width: 0; /* prevent grid blowout */
   }
   .section-title {
     @apply text-[11px] font-medium uppercase tracking-[0.08em] text-[#666] mb-3;
   }
   .data-label {
-    @apply text-[13px] text-[#666];
+    @apply text-[11px] sm:text-[13px] text-[#666] shrink-0;
   }
   .data-value {
-    @apply text-[13px] text-[#e5e5e5] font-medium;
+    @apply text-[13px] text-[#e5e5e5] font-medium min-w-0 truncate;
   }
   .badge {
-    @apply inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded;
+    @apply inline-flex items-center text-[10px] sm:text-[11px] font-medium px-1.5 sm:px-2 py-0.5 rounded whitespace-nowrap;
   }
   .badge-green {
     @apply bg-[#0d2818] text-[#4ade80] border border-[#166534];
@@ -53,7 +60,7 @@
     @apply bg-[#1f1f1f] text-[#888] border border-[#333];
   }
   .btn-run {
-    @apply bg-white text-black text-sm font-medium px-5 py-2 rounded-md 
+    @apply bg-white text-black text-sm font-medium px-4 sm:px-5 py-1.5 sm:py-2 rounded-md 
            hover:bg-[#e5e5e5] active:bg-[#ccc] transition-colors duration-150;
   }
 }

@@ -37,11 +37,11 @@ export default function App() {
     <div className="min-h-screen flex flex-col">
       <Header onRun={runCheck} loading={status === 'loading'} ip={data?.Head.IP} />
 
-      <main className="flex-1 max-w-[960px] w-full mx-auto px-5 py-6">
+      <main className="flex-1 max-w-[960px] w-full mx-auto px-3 sm:px-5 py-4 sm:py-6">
         {status === 'idle' && !data && (
           <div className="flex flex-col items-center justify-center h-[70vh] gap-6 animate-fade-in">
-            <h2 className="text-2xl font-semibold text-white">IP Quality Check</h2>
-            <p className="text-[#666] text-sm max-w-sm text-center leading-relaxed">
+            <h2 className="text-xl sm:text-2xl font-semibold text-white">IP Quality Check</h2>
+            <p className="text-[#666] text-sm max-w-sm text-center leading-relaxed px-4">
               检测 IP 地址的代理/VPN 使用情况、风险评分和流媒体解锁状态
             </p>
             <button onClick={runCheck} className="btn-run mt-2">
@@ -65,9 +65,9 @@ export default function App() {
         )}
 
         {data && status === 'done' && (
-          <div className="space-y-4 animate-fade-in">
+          <div className="space-y-3 sm:space-y-4 animate-fade-in">
             <IPOverview head={data.Head} info={data.Info} type={data.Type} />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
               <ScoreSection score={data.Score} />
               <FactorSection factor={data.Factor} />
             </div>
@@ -77,9 +77,9 @@ export default function App() {
         )}
       </main>
 
-      <footer className="flex items-center justify-between px-5 py-3 border-t border-[#2a2a2a] text-[11px] text-[#444] max-w-[960px] w-full mx-auto">
+      <footer className="flex items-center justify-between px-3 sm:px-5 py-2.5 border-t border-[#2a2a2a] text-[10px] sm:text-[11px] text-[#444] max-w-[960px] w-full mx-auto">
         <span>{status === 'done' ? '检测完成' : status === 'loading' ? '检测中...' : '就绪'}</span>
-        {data && <span>{data.Head.Time}</span>}
+        {data && <span className="truncate ml-2">{data.Head.Time}</span>}
       </footer>
     </div>
   );

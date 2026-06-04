@@ -1,13 +1,11 @@
 import type { IPReport } from '../types';
 
-type MailValue = boolean | null | { Total?: number; Clean?: number; Marked?: number; Blacklisted?: number };
-
 const MAIL_SERVICES = ['Gmail', 'Outlook', 'Yahoo', 'Apple', 'QQ', 'MailRU', 'AOL', 'GMX', 'MailCOM', '163', 'Sohu', 'Sina'];
 
 function StatusDot({ value }: { value: boolean | null }) {
-  if (value === true) return <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80]" />;
-  if (value === false) return <span className="w-1.5 h-1.5 rounded-full bg-[#f87171]" />;
-  return <span className="w-1.5 h-1.5 rounded-full bg-[#444]" />;
+  if (value === true) return <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80] shrink-0" />;
+  if (value === false) return <span className="w-1.5 h-1.5 rounded-full bg-[#f87171] shrink-0" />;
+  return <span className="w-1.5 h-1.5 rounded-full bg-[#444] shrink-0" />;
 }
 
 function StatusText({ value }: { value: boolean | null }) {
@@ -22,7 +20,6 @@ export default function MailSection({ mail }: { mail: IPReport['Mail'] }) {
   const dnsbl = mail.DNSBlacklist;
   const hasDnsbl = dnsbl && typeof dnsbl === 'object' && dnsbl.Total !== undefined;
 
-  // Collect service entries (exclude Port25 and DNSBlacklist)
   const serviceEntries = MAIL_SERVICES
     .filter(name => name in mail)
     .map(name => ({ name, val: mail[name] as boolean | null }));
@@ -33,7 +30,7 @@ export default function MailSection({ mail }: { mail: IPReport['Mail'] }) {
   if (!hasServices && !hasPort25 && !hasDnsbl) return null;
 
   return (
-    <div className="section p-4">
+    <div className="section p-3 sm:p-4">
       <div className="section-title">邮件端口</div>
 
       {hasPort25 && (
@@ -47,23 +44,21 @@ export default function MailSection({ mail }: { mail: IPReport['Mail'] }) {
       )}
 
       {hasServices && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-1 mt-2">
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-x-3 gap-y-1.5 mt-2">
           {serviceEntries.map(({ name, val }) => (
-            <div key={name} className="flex items-center justify-between py-1">
-              <div className="flex items-center gap-1.5">
-                <StatusDot value={val} />
-                <span className="text-[12px] text-[#999]">{name}</span>
-              </div>
+            <div key={name} className="flex items-center gap-1.5">
+              <StatusDot value={val} />
+              <span className="text-[11px] sm:text-[12px] text-[#999] truncate">{name}</span>
             </div>
           ))}
         </div>
       )}
 
       {hasDnsbl && (
-        <div className="flex items-center gap-4 mt-3 pt-3 border-t border-[#2a2a2a]">
-          <span className="text-[12px] text-[#666]">DNS 黑名单</span>
-          <div className="flex items-center gap-3 text-[12px]">
-            <span className="text-[#888]">总计 {dnsbl.Total}</span>
+        <div className="mt-3 pt-3 border-t border-[#2a2a2a]">
+          <span className="text-[11px] text-[#666] block mb-1.5">DNS 黑名单</span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
+            <span className="text-[#888]">总计 {dnsbl.Total ?? '-'}</span>
             <span className="text-[#4ade80]">干净 {dnsbl.Clean ?? '-'}</span>
             <span className="text-[#fbbf24]">标记 {dnsbl.Marked ?? '-'}</span>
             <span className="text-[#f87171]">拉黑 {dnsbl.Blacklisted ?? '-'}</span>

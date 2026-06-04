@@ -20,12 +20,12 @@ export default function IPOverview({ head, info, type }: Props) {
   ];
 
   return (
-    <div className="section p-4">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-2.5">
+    <div className="section p-3 sm:p-4">
+      <div className="space-y-2 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-x-6 sm:gap-y-2.5">
         {rows.map(([label, value]) => (
-          <div key={label} className="flex flex-col gap-0.5">
-            <span className="data-label">{label}</span>
-            <span className="data-value truncate">{value}</span>
+          <div key={label} className="flex items-baseline gap-2 sm:flex-col sm:gap-0.5">
+            <span className="data-label whitespace-nowrap shrink-0 w-8 sm:w-auto">{label}</span>
+            <span className="data-value">{value}</span>
           </div>
         ))}
       </div>
