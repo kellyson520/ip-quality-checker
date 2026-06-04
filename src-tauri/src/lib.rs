@@ -159,6 +159,36 @@ async fn run_ip_check_with_args(args: Vec<String>) -> Result<String, String> {
     Ok(stdout)
 }
 
+/// Helper: get string from nested JSON path
+#[cfg(mobile)]
+fn jstr(v: &Value, path: &[&str]) -> String {
+    let mut cur = v;
+    for key in path {
+        cur = cur.get(key).unwrap_or(&Value::Null);
+    }
+    cur.as_str().unwrap_or("null").to_string()
+}
+
+/// Helper: get f64 from nested JSON path
+#[cfg(mobile)]
+fn jf64(v: &Value, path: &[&str]) -> f64 {
+    let mut cur = v;
+    for key in path {
+        cur = cur.get(key).unwrap_or(&Value::Null);
+    }
+    cur.as_f64().unwrap_or(0.0)
+}
+
+/// Helper: get bool from nested JSON path
+#[cfg(mobile)]
+fn jbool(v: &Value, path: &[&str]) -> bool {
+    let mut cur = v;
+    for key in path {
+        cur = cur.get(key).unwrap_or(&Value::Null);
+    }
+    cur.as_bool().unwrap_or(false)
+}
+
 /// Fetch JSON from URL using shared client (mobile only)
 #[cfg(mobile)]
 async fn fetch_json(url: &str) -> Result<Value, String> {
@@ -194,13 +224,11 @@ fn chrono_now() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
     let secs = duration.as_secs();
-    // Convert to UTC datetime components
     let days = secs / 86400;
     let time_of_day = secs % 86400;
     let hours = time_of_day / 3600;
     let minutes = (time_of_day % 3600) / 60;
     let seconds = time_of_day % 60;
-    // Days since epoch to Y-M-D (simplified leap year calculation)
     let mut y = 1970i64;
     let mut remaining_days = days as i64;
     loop {
@@ -219,16 +247,7 @@ fn chrono_now() -> String {
     let days_in_month = [
         31,
         if is_leap { 29 } else { 28 },
-        31,
-        30,
-        31,
-        30,
-        31,
-        31,
-        30,
-        31,
-        30,
-        31,
+        31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
     ];
     let mut m = 1u32;
     for &dim in &days_in_month {
@@ -245,69 +264,53 @@ fn chrono_now() -> String {
     )
 }
 
-/// Calculate weighted score from multiple sources (mobile only)
-/// Only includes sources with non-zero scores in the average
-#[cfg(mobile)]
-fn calculate_score(scam: &Value, abuse: &Value, ipqs: &Value) -> u32 {
-    let scam_score = scam.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let abuse_score = abuse
-        .get("abuseConfidenceScore")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
-    let ipqs_score = ipqs.get("fraud_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
-
-    let mut total = 0.0;
-    let mut count = 0u32;
-    if scam_score > 0.0 {
-        total += scam_score;
-        count += 1;
-    }
-    if abuse_score > 0.0 {
-        total += abuse_score;
-        count += 1;
-    }
-    if ipqs_score > 0.0 {
-        total += ipqs_score;
-        count += 1;
-    }
-    if count > 0 {
-        (total / count as f64) as u32
-    } else {
-        0
-    }
-}
-
 /// Native IP check using HTTP APIs (mobile - Android/iOS)
 /// Output format matches the bash script (ip.sh) JSON output exactly
 #[cfg(mobile)]
 #[tauri::command]
 async fn run_ip_check() -> Result<String, String> {
-    // Step 1: Get public IP
-    let ip_resp = fetch_json("https://api.ipify.org?format=json").await?;
-    let ip = ip_resp["ip"]
-        .as_str()
-        .ok_or("Failed to get IP from response")?
-        .to_string();
+    // Step 1: Get public IP (try multiple services)
+    let ip = match fetch_json("https://api.ipify.org?format=json").await {
+        Ok(v) => v["ip"].as_str().unwrap_or("").to_string(),
+        Err(_) => {
+            // Fallback
+            let resp = get_client()
+                .get("https://httpbin.org/ip")
+                .send()
+                .await
+                .map_err(|e| format!("Cannot get IP: {}", e))?;
+            let text = resp.text().await.unwrap_or_default();
+            let v: Value = serde_json::from_str(&text).unwrap_or(serde_json::json!({}));
+            v["origin"]
+                .as_str()
+                .unwrap_or("")
+                .split(',')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string()
+        }
+    };
+    if ip.is_empty() {
+        return Err("无法获取公网IP".to_string());
+    }
 
-    // Step 2-5: Concurrent API requests
+    // Step 2-4: Concurrent API requests
     let info_url = format!("https://ipinfo.check.place/{}?lang=zh-CN", ip);
     let scam_url = format!("https://ipinfo.check.place/{}?db=scamalytics", ip);
     let abuse_url = format!("https://ipinfo.check.place/{}?db=abuseipdb", ip);
-    let ipqs_url = format!("https://ipinfo.check.place/{}?db=ipqualityscore", ip);
 
-    let (info_r, scam_r, abuse_r, ipqs_r) = tokio::join!(
+    let (info_r, scam_r, abuse_r) = tokio::join!(
         fetch_json(&info_url),
         fetch_json(&scam_url),
-        fetch_json(&abuse_url),
-        fetch_json(&ipqs_url)
+        fetch_json(&abuse_url)
     );
 
     let info = info_r.unwrap_or(serde_json::json!({}));
     let scam = scam_r.unwrap_or(serde_json::json!({}));
     let abuse = abuse_r.unwrap_or(serde_json::json!({}));
-    let ipqs = ipqs_r.unwrap_or(serde_json::json!({}));
 
-    // Step 6: Check streaming services concurrently
+    // Step 5: Check streaming services concurrently
     let (nf, dp, yt, am, rd, gp) = tokio::join!(
         check_http_status("https://www.netflix.com/title/81280792"),
         check_http_status("https://www.disneyplus.com/"),
@@ -316,60 +319,133 @@ async fn run_ip_check() -> Result<String, String> {
         check_http_status("https://www.reddit.com/"),
         check_http_status("https://chatgpt.com/")
     );
+    let yn = |code: u16| -> &str { if code == 200 { "Y" } else { "N" } };
 
-    let status_to_yn = |code: u16| if code == 200 { "Y" } else { "N" };
+    // === Map API responses to bash script JSON format ===
 
-    // Build result matching ip.sh JSON structure exactly
+    // Info: from ipinfo.check.place (maxmind data)
+    let asn_num = info["ASN"]["AutonomousSystemNumber"].as_u64().unwrap_or(0);
+    let asn = if asn_num > 0 {
+        format!("{}", asn_num)
+    } else {
+        "null".to_string()
+    };
+    let org = jstr(&info, &["ASN", "AutonomousSystemOrganization"]);
+    let city_name = jstr(&info, &["City", "Name"]);
+    let lat = info["City"]["Latitude"].as_f64().map(|v| v.to_string()).unwrap_or_else(|| "null".to_string());
+    let lon = info["City"]["Longitude"].as_f64().map(|v| v.to_string()).unwrap_or_else(|| "null".to_string());
+    let continent_code = jstr(&info, &["City", "Continent", "Code"]);
+    let continent_name = jstr(&info, &["City", "Continent", "Name"]);
+    let country_code = jstr(&info, &["Country", "IsoCode"]);
+    let country_name = jstr(&info, &["Country", "Name"]);
+    let reg_country_code = jstr(&info, &["Country", "RegisteredCountry", "IsoCode"]);
+    let reg_country_name = jstr(&info, &["Country", "RegisteredCountry", "Name"]);
+    let sub_code = info["City"]["Subdivisions"]
+        .as_array()
+        .and_then(|a| a.first())
+        .map(|v| jstr(v, &["IsoCode"]))
+        .unwrap_or_else(|| "N/A".to_string());
+    let sub_name = info["City"]["Subdivisions"]
+        .as_array()
+        .and_then(|a| a.first())
+        .map(|v| jstr(v, &["Name"]))
+        .unwrap_or_else(|| "N/A".to_string());
+    let timezone = jstr(&info, &["City", "Location", "TimeZone"]);
+
+    // Info.Type: compare country vs registered country
+    let info_type = if country_code != "null"
+        && !country_code.is_empty()
+        && country_code == reg_country_code
+    {
+        "本土IP地址".to_string()
+    } else {
+        "海外IP地址".to_string()
+    };
+
+    // Scamalytics: nested under .scamalytics.*
+    let scam_score = jf64(&scam, &["scamalytics", "scamalytics_score"]);
+    let scam_is_vpn = jbool(&scam, &["scamalytics", "scamalytics_proxy", "is_vpn"]);
+    let scam_is_dc = jbool(&scam, &["scamalytics", "scamalytics_proxy", "is_datacenter"]);
+    let scam_is_tor = scam
+        .pointer("/external_datasources/x4bnet/is_tor")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let scam_is_proxy = scam
+        .pointer("/external_datasources/firehol/is_proxy")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let scam_is_blacklisted = jbool(&scam, &["scamalytics", "is_blacklisted_external"]);
+    let scam_country = scam
+        .pointer("/external_datasources/maxmind_geolite2/ip_country_code")
+        .and_then(|v| v.as_str())
+        .unwrap_or("null")
+        .to_string();
+
+    // AbuseIPDB: nested under .data.*
+    let abuse_score = jf64(&abuse, &["data", "abuseConfidenceScore"]);
+    let abuse_usage = jstr(&abuse, &["data", "usageType"]);
+    let abuse_is_tor = jbool(&abuse, &["data", "isTor"]);
+
+    // Build JSON matching bash script output structure exactly
     let result = serde_json::json!({
         "Head": {
             "IP": ip,
             "Time": chrono_now(),
             "Version": "mobile-native"
         },
-        "Info": info,
+        "Info": {
+            "ASN": asn,
+            "Organization": org,
+            "Latitude": lat,
+            "Longitude": lon,
+            "DMS": "null",
+            "Map": "null",
+            "TimeZone": timezone,
+            "City": { "Name": city_name },
+            "Region": { "Code": country_code, "Name": country_name },
+            "Continent": { "Code": continent_code, "Name": continent_name },
+            "RegisteredRegion": { "Code": reg_country_code, "Name": reg_country_name },
+            "Type": info_type
+        },
         "Type": {
             "Usage": {
-                "usage_type": scam.get("usage_type").and_then(|v| v.as_str()).unwrap_or("unknown").to_string()
+                "AbuseIPDB": abuse_usage
             },
             "Company": {
-                "company_type": scam.get("company_type").and_then(|v| v.as_str()).unwrap_or("unknown").to_string()
+                "AbuseIPDB": abuse_usage
             }
         },
         "Score": {
-            "Total": calculate_score(&scam, &abuse, &ipqs).to_string(),
-            "Scamalytics": scam.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0).to_string(),
-            "AbuseIPDB": abuse.get("abuseConfidenceScore").and_then(|v| v.as_f64()).unwrap_or(0.0).to_string(),
-            "IPQS": ipqs.get("fraud_score").and_then(|v| v.as_f64()).unwrap_or(0.0).to_string()
+            "SCAMALYTICS": format!("{}", scam_score as u32),
+            "AbuseIPDB": format!("{}", abuse_score as u32)
         },
         "Factor": {
             "CountryCode": {
-                scam.get("country_code").and_then(|v| v.as_str()).unwrap_or("XX").to_string(): true
+                scam_country.clone(): true
             },
             "Proxy": {
-                "scamalytics": scam.get("proxy").and_then(|v| v.as_str()).unwrap_or("unknown") != "no",
-                "ipqs": ipqs.get("proxy").and_then(|v| v.as_bool()).unwrap_or(false)
+                "scamalytics": scam_is_proxy,
+                "AbuseIPDB": false
             },
             "Tor": {
-                "scamalytics": scam.get("tor").and_then(|v| v.as_str()).unwrap_or("unknown") != "no",
-                "ipqs": ipqs.get("tor").and_then(|v| v.as_bool()).unwrap_or(false)
+                "scamalytics": scam_is_tor,
+                "AbuseIPDB": abuse_is_tor
             },
             "VPN": {
-                "scamalytics": scam.get("vpn").and_then(|v| v.as_str()).unwrap_or("unknown") != "no",
-                "ipqs": ipqs.get("vpn").and_then(|v| v.as_bool()).unwrap_or(false)
+                "scamalytics": scam_is_vpn
             },
             "Abuser": {
-                "abuseipdb": abuse.get("abuseConfidenceScore").and_then(|v| v.as_f64()).unwrap_or(0.0) > 0.0,
-                "ipqs": ipqs.get("abuse_score").and_then(|v| v.as_f64()).unwrap_or(0.0) > 0.0
+                "scamalytics": scam_is_blacklisted
             }
         },
         "Media": {
             "TikTok": { "Result": "N" },
-            "DisneyPlus": { "Result": status_to_yn(dp) },
-            "Netflix": { "Result": status_to_yn(nf) },
-            "YouTube": { "Result": status_to_yn(yt) },
-            "AmazonPrime": { "Result": status_to_yn(am) },
-            "Reddit": { "Result": status_to_yn(rd) },
-            "ChatGPT": { "Result": status_to_yn(gp) }
+            "DisneyPlus": { "Result": yn(dp) },
+            "Netflix": { "Result": yn(nf) },
+            "YouTube": { "Result": yn(yt) },
+            "AmazonPrime": { "Result": yn(am) },
+            "Reddit": { "Result": yn(rd) },
+            "ChatGPT": { "Result": yn(gp) }
         },
         "Mail": {
             "Port25": { "Status": "unknown", "Port": "25" },
