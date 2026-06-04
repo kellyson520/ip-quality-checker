@@ -295,20 +295,35 @@ async fn run_ip_check() -> Result<String, String> {
         return Err("无法获取公网IP".to_string());
     }
 
-    // Step 2-4: Concurrent API requests
+    // Step 2: Concurrent API requests (8 data sources like bash script)
     let info_url = format!("https://ipinfo.check.place/{}?lang=zh-CN", ip);
     let scam_url = format!("https://ipinfo.check.place/{}?db=scamalytics", ip);
     let abuse_url = format!("https://ipinfo.check.place/{}?db=abuseipdb", ip);
+    let reg_url = format!("https://ipinfo.check.place/{}?db=ipregistry", ip);
+    let ipapi_url = format!("https://ipinfo.check.place/{}?db=ipapi", ip);
+    let ip2l_url = format!("https://ipinfo.check.place/{}?db=ip2location", ip);
+    let ipdata_url = format!("https://ipinfo.check.place/{}?db=ipdata", ip);
+    let ipinfo_url = format!("https://ipinfo.io/widget/demo/{}", ip);
 
-    let (info_r, scam_r, abuse_r) = tokio::join!(
+    let (info_r, scam_r, abuse_r, reg_r, ipapi_r, ip2l_r, ipdata_r, ipinfo_r) = tokio::join!(
         fetch_json(&info_url),
         fetch_json(&scam_url),
-        fetch_json(&abuse_url)
+        fetch_json(&abuse_url),
+        fetch_json(&reg_url),
+        fetch_json(&ipapi_url),
+        fetch_json(&ip2l_url),
+        fetch_json(&ipdata_url),
+        fetch_json(&ipinfo_url)
     );
 
     let info = info_r.unwrap_or(serde_json::json!({}));
     let scam = scam_r.unwrap_or(serde_json::json!({}));
     let abuse = abuse_r.unwrap_or(serde_json::json!({}));
+    let reg = reg_r.unwrap_or(serde_json::json!({}));
+    let ipapi = ipapi_r.unwrap_or(serde_json::json!({}));
+    let ip2l = ip2l_r.unwrap_or(serde_json::json!({}));
+    let ipdata = ipdata_r.unwrap_or(serde_json::json!({}));
+    let ipinfo = ipinfo_r.unwrap_or(serde_json::json!({}));
 
     // Step 5: Check streaming services concurrently
     let (tt, nf, dp, yt, am, rd, gp) = tokio::join!(
@@ -363,45 +378,83 @@ async fn run_ip_check() -> Result<String, String> {
         "海外IP地址".to_string()
     };
 
-    // Scamalytics: nested under .scamalytics.*
+    // Scamalytics
     let scam_score = jf64(&scam, &["scamalytics", "scamalytics_score"]);
     let scam_is_vpn = jbool(&scam, &["scamalytics", "scamalytics_proxy", "is_vpn"]);
     let scam_is_dc = jbool(&scam, &["scamalytics", "scamalytics_proxy", "is_datacenter"]);
-    let scam_is_tor = scam
-        .pointer("/external_datasources/x4bnet/is_tor")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    let scam_is_proxy = scam
-        .pointer("/external_datasources/firehol/is_proxy")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let scam_is_tor = jbool(&scam, &["external_datasources", "x4bnet", "is_tor"]);
+    let scam_is_proxy = jbool(&scam, &["external_datasources", "firehol", "is_proxy"]);
     let scam_is_blacklisted = jbool(&scam, &["scamalytics", "is_blacklisted_external"]);
-    let scam_country = scam
-        .pointer("/external_datasources/maxmind_geolite2/ip_country_code")
-        .and_then(|v| v.as_str())
-        .unwrap_or("null")
-        .to_string();
-    // Robot: combine spambot + operamini + semrush
-    let scam_robot1 = scam
-        .pointer("/external_datasources/x4bnet/is_blacklisted_spambot")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    let scam_robot2 = scam
-        .pointer("/external_datasources/x4bnet/is_bot_operamini")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    let scam_robot3 = scam
-        .pointer("/external_datasources/x4bnet/is_bot_semrush")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    let scam_is_robot = scam_robot1 || scam_robot2 || scam_robot3;
+    let scam_country = jstr(&scam, &["external_datasources", "maxmind_geolite2", "ip_country_code"]);
+    let scam_robot = jbool(&scam, &["external_datasources", "x4bnet", "is_blacklisted_spambot"])
+        || jbool(&scam, &["external_datasources", "x4bnet", "is_bot_operamini"])
+        || jbool(&scam, &["external_datasources", "x4bnet", "is_bot_semrush"]);
 
-    // AbuseIPDB: nested under .data.*
+    // AbuseIPDB
     let abuse_score = jf64(&abuse, &["data", "abuseConfidenceScore"]);
     let abuse_usage = jstr(&abuse, &["data", "usageType"]);
     let abuse_is_tor = jbool(&abuse, &["data", "isTor"]);
 
-    // Calculate total score (weighted average of available sources)
+    // ipregistry
+    let reg_country = jstr(&reg, &["location", "country", "code"]);
+    let reg_proxy = jbool(&reg, &["security", "is_proxy"]);
+    let reg_vpn = jbool(&reg, &["security", "is_vpn"]);
+    let reg_tor = jbool(&reg, &["security", "is_tor"]) || jbool(&reg, &["security", "is_tor_exit"]);
+    let reg_server = jbool(&reg, &["security", "is_cloud_provider"]);
+    let reg_abuser = jbool(&reg, &["security", "is_abuser"]);
+    let reg_usage = jstr(&reg, &["connection", "type"]);
+    let reg_company_type = jstr(&reg, &["company", "type"]);
+
+    // ipapi
+    let ipapi_country = jstr(&ipapi, &["location", "country_code"]);
+    let ipapi_proxy = jbool(&ipapi, &["is_proxy"]);
+    let ipapi_vpn = jbool(&ipapi, &["is_vpn"]);
+    let ipapi_tor = jbool(&ipapi, &["is_tor"]);
+    let ipapi_dc = jbool(&ipapi, &["is_datacenter"]);
+    let ipapi_abuser = jbool(&ipapi, &["is_abuser"]);
+    let ipapi_crawler = jbool(&ipapi, &["is_crawler"]);
+    let ipapi_usage = jstr(&ipapi, &["asn", "type"]);
+    let ipapi_company_type = jstr(&ipapi, &["company", "type"]);
+
+    // ip2location
+    let ip2l_country = jstr(&ip2l, &["country_code"]);
+    let ip2l_usage = jstr(&ip2l, &["usage_type"]);
+
+    // ipdata
+    let ipdata_country = jstr(&ipdata, &["country_code"]);
+    let ipdata_proxy = jbool(&ipdata, &["threat", "is_proxy"]);
+    let ipdata_tor = jbool(&ipdata, &["threat", "is_tor"]);
+    let ipdata_dc = jbool(&ipdata, &["threat", "is_datacenter"]);
+    let ipdata_abuser = jbool(&ipdata, &["threat", "is_threat"])
+        || jbool(&ipdata, &["threat", "is_known_abuser"])
+        || jbool(&ipdata, &["threat", "is_known_attacker"]);
+
+    // ipinfo.io
+    let iio_country = jstr(&ipinfo, &["data", "country"]);
+    let iio_proxy = jbool(&ipinfo, &["data", "privacy", "proxy"]);
+    let iio_vpn = jbool(&ipinfo, &["data", "privacy", "vpn"]);
+    let iio_tor = jbool(&ipinfo, &["data", "privacy", "tor"]);
+    let iio_hosting = jbool(&ipinfo, &["data", "privacy", "hosting"]);
+    let iio_usage = jstr(&ipinfo, &["data", "asn", "type"]);
+    let iio_company_type = jstr(&ipinfo, &["data", "company", "type"]);
+
+    // === Build unified output ===
+
+    // Type.Usage: collect from all sources
+    let mut usage_map = serde_json::Map::new();
+    if iio_usage != "null" && !iio_usage.is_empty() { usage_map.insert("IPinfo".into(), Value::String(iio_usage)); }
+    if reg_usage != "null" && !reg_usage.is_empty() { usage_map.insert("ipregistry".into(), Value::String(reg_usage)); }
+    if ipapi_usage != "null" && !ipapi_usage.is_empty() { usage_map.insert("ipapi".into(), Value::String(ipapi_usage)); }
+    if abuse_usage != "null" && !abuse_usage.is_empty() { usage_map.insert("AbuseIPDB".into(), Value::String(abuse_usage)); }
+    if ip2l_usage != "null" && !ip2l_usage.is_empty() { usage_map.insert("IP2LOCATION".into(), Value::String(ip2l_usage)); }
+
+    // Type.Company: collect from all sources
+    let mut company_map = serde_json::Map::new();
+    if iio_company_type != "null" && !iio_company_type.is_empty() { company_map.insert("IPinfo".into(), Value::String(iio_company_type)); }
+    if reg_company_type != "null" && !reg_company_type.is_empty() { company_map.insert("ipregistry".into(), Value::String(reg_company_type)); }
+    if ipapi_company_type != "null" && !ipapi_company_type.is_empty() { company_map.insert("ipapi".into(), Value::String(ipapi_company_type)); }
+
+    // Score: weighted average of available sources
     let total_score = {
         let mut total = 0.0;
         let mut count = 0u32;
@@ -410,7 +463,6 @@ async fn run_ip_check() -> Result<String, String> {
         if count > 0 { (total / count as f64) as u32 } else { 0 }
     };
 
-    // Build JSON matching bash script output structure exactly
     let result = serde_json::json!({
         "Head": {
             "IP": ip,
@@ -432,12 +484,8 @@ async fn run_ip_check() -> Result<String, String> {
             "Type": info_type
         },
         "Type": {
-            "Usage": {
-                "AbuseIPDB": abuse_usage
-            },
-            "Company": {
-                "AbuseIPDB": abuse_usage
-            }
+            "Usage": Value::Object(usage_map),
+            "Company": Value::Object(company_map)
         },
         "Score": {
             "Total": format!("{}", total_score),
@@ -446,27 +494,49 @@ async fn run_ip_check() -> Result<String, String> {
         },
         "Factor": {
             "CountryCode": {
-                scam_country.clone(): true
+                "maxmind": true,
+                "ipregistry": reg_country != "null" && !reg_country.is_empty(),
+                "ipapi": ipapi_country != "null" && !ipapi_country.is_empty(),
+                "ipdata": ipdata_country != "null" && !ipdata_country.is_empty(),
+                "IPinfo": iio_country != "null" && !iio_country.is_empty()
             },
             "Proxy": {
                 "scamalytics": scam_is_proxy,
-                "AbuseIPDB": false
+                "ipregistry": reg_proxy,
+                "ipapi": ipapi_proxy,
+                "ipdata": ipdata_proxy,
+                "IPinfo": iio_proxy
             },
             "Tor": {
                 "scamalytics": scam_is_tor,
-                "AbuseIPDB": abuse_is_tor
+                "ipregistry": reg_tor,
+                "ipapi": ipapi_tor,
+                "AbuseIPDB": abuse_is_tor,
+                "ipdata": ipdata_tor,
+                "IPinfo": iio_tor
             },
             "VPN": {
-                "scamalytics": scam_is_vpn
+                "scamalytics": scam_is_vpn,
+                "ipregistry": reg_vpn,
+                "ipapi": ipapi_vpn,
+                "IPinfo": iio_vpn
             },
             "Server": {
-                "scamalytics": scam_is_dc
+                "scamalytics": scam_is_dc,
+                "ipregistry": reg_server,
+                "ipapi": ipapi_dc,
+                "ipdata": ipdata_dc,
+                "IPinfo": iio_hosting
             },
             "Abuser": {
-                "scamalytics": scam_is_blacklisted
+                "scamalytics": scam_is_blacklisted,
+                "ipregistry": reg_abuser,
+                "ipapi": ipapi_abuser,
+                "ipdata": ipdata_abuser
             },
             "Robot": {
-                "scamalytics": scam_is_robot
+                "scamalytics": scam_robot,
+                "ipapi": ipapi_crawler
             }
         },
         "Media": {
