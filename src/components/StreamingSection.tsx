@@ -50,12 +50,14 @@ export default function StreamingSection({ media }: { media: IPReport['Media'] }
   return (
     <div className="section p-3 sm:p-4">
       <div className="section-title">流媒体</div>
-      {/* Mobile: vertical list. Desktop: 2-4 col grid */}
-      <div className="space-y-1 sm:space-y-0 sm:grid sm:grid-cols-2 md:grid-cols-4 sm:gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {entries.map(([key, val]) => (
-          <div key={key} className="flex items-center justify-between py-1.5 sm:py-1.5 sm:px-3 sm:rounded sm:bg-[#1f1f1f]">
-            <div className="flex items-center min-w-0">
-              <span className="text-[13px] text-[#ccc]">{SERVICES[key] || key}</span>
+          <div
+            key={key}
+            className="flex min-w-0 items-center justify-between gap-3 rounded bg-[#1f1f1f] px-3 py-2"
+          >
+            <div className="flex min-w-0 items-center">
+              <span className="truncate text-[13px] text-[#ccc]">{SERVICES[key] || key}</span>
               <RegionBadge region={val.Region} />
             </div>
             <Badge status={val.Status ?? val.Result} />

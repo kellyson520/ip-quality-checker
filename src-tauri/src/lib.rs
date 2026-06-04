@@ -58,7 +58,12 @@ fn find_bash() -> Result<String, String> {
             }
         }
 
-        if let Ok(output) = Command::new("wsl").arg("bash").arg("-c").arg("echo ok").output() {
+        if let Ok(output) = Command::new("wsl")
+            .arg("bash")
+            .arg("-c")
+            .arg("echo ok")
+            .output()
+        {
             if output.status.success() {
                 return Ok("wsl".to_string());
             }
@@ -205,8 +210,13 @@ async fn fetch_json(url: &str) -> Result<Value, String> {
         .await
         .map_err(|e| format!("Read response failed: {}", e))?;
 
-    serde_json::from_str(&text)
-        .map_err(|e| format!("JSON parse error: {} | body: {}", e, &text[..200.min(text.len())]))
+    serde_json::from_str(&text).map_err(|e| {
+        format!(
+            "JSON parse error: {} | body: {}",
+            e,
+            &text[..200.min(text.len())]
+        )
+    })
 }
 
 /// Fetch text/HTTP status from URL (mobile only, for non-JSON endpoints)
@@ -262,7 +272,16 @@ fn chrono_now() -> String {
     let days_in_month = [
         31,
         if is_leap { 29 } else { 28 },
-        31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
     ];
     let mut m = 1u32;
     for &dim in &days_in_month {
@@ -351,7 +370,13 @@ async fn run_ip_check() -> Result<String, String> {
         check_http_status("https://www.reddit.com/"),
         check_http_status("https://chatgpt.com/")
     );
-    let yn = |code: u16| -> &str { if code == 200 { "解锁" } else { "Block" } };
+    let yn = |code: u16| -> &str {
+        if code == 200 {
+            "解锁"
+        } else {
+            "Block"
+        }
+    };
 
     // Step 6: Check mail services concurrently via TCP connectivity
     let (gmail, outlook, yahoo, apple, qq, mail163, sohu, sina) = tokio::join!(
@@ -376,8 +401,14 @@ async fn run_ip_check() -> Result<String, String> {
     };
     let org = jstr(&info, &["ASN", "AutonomousSystemOrganization"]);
     let city_name = jstr(&info, &["City", "Name"]);
-    let lat = info["City"]["Latitude"].as_f64().map(|v| v.to_string()).unwrap_or_else(|| "null".to_string());
-    let lon = info["City"]["Longitude"].as_f64().map(|v| v.to_string()).unwrap_or_else(|| "null".to_string());
+    let lat = info["City"]["Latitude"]
+        .as_f64()
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "null".to_string());
+    let lon = info["City"]["Longitude"]
+        .as_f64()
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "null".to_string());
     let continent_code = jstr(&info, &["City", "Continent", "Code"]);
     let continent_name = jstr(&info, &["City", "Continent", "Name"]);
     let country_code = jstr(&info, &["Country", "IsoCode"]);
@@ -399,24 +430,43 @@ async fn run_ip_check() -> Result<String, String> {
     // Info.Type: compare country vs registered country
     let info_type = if country_code != "null"
         && !country_code.is_empty()
-        && country_code == reg_country_code
+        && reg_country_code != "null"
+        && !reg_country_code.is_empty()
     {
-        "本土IP地址".to_string()
+        if country_code == reg_country_code {
+            Value::String("本土IP地址".to_string())
+        } else {
+            Value::String("海外IP地址".to_string())
+        }
     } else {
-        "海外IP地址".to_string()
+        Value::Null
     };
 
     // Scamalytics
     let scam_score = jf64(&scam, &["scamalytics", "scamalytics_score"]);
     let scam_is_vpn = jbool(&scam, &["scamalytics", "scamalytics_proxy", "is_vpn"]);
-    let scam_is_dc = jbool(&scam, &["scamalytics", "scamalytics_proxy", "is_datacenter"]);
+    let scam_is_dc = jbool(
+        &scam,
+        &["scamalytics", "scamalytics_proxy", "is_datacenter"],
+    );
     let scam_is_tor = jbool(&scam, &["external_datasources", "x4bnet", "is_tor"]);
     let scam_is_proxy = jbool(&scam, &["external_datasources", "firehol", "is_proxy"]);
     let scam_is_blacklisted = jbool(&scam, &["scamalytics", "is_blacklisted_external"]);
-    let scam_country = jstr(&scam, &["external_datasources", "maxmind_geolite2", "ip_country_code"]);
-    let scam_robot = jbool(&scam, &["external_datasources", "x4bnet", "is_blacklisted_spambot"])
-        || jbool(&scam, &["external_datasources", "x4bnet", "is_bot_operamini"])
-        || jbool(&scam, &["external_datasources", "x4bnet", "is_bot_semrush"]);
+    let scam_country = jstr(
+        &scam,
+        &[
+            "external_datasources",
+            "maxmind_geolite2",
+            "ip_country_code",
+        ],
+    );
+    let scam_robot = jbool(
+        &scam,
+        &["external_datasources", "x4bnet", "is_blacklisted_spambot"],
+    ) || jbool(
+        &scam,
+        &["external_datasources", "x4bnet", "is_bot_operamini"],
+    ) || jbool(&scam, &["external_datasources", "x4bnet", "is_bot_semrush"]);
 
     // AbuseIPDB
     let abuse_score = jf64(&abuse, &["data", "abuseConfidenceScore"]);
@@ -472,25 +522,51 @@ async fn run_ip_check() -> Result<String, String> {
 
     // Type.Usage: collect from all sources
     let mut usage_map = serde_json::Map::new();
-    if iio_usage != "null" && !iio_usage.is_empty() { usage_map.insert("IPinfo".into(), Value::String(iio_usage)); }
-    if reg_usage != "null" && !reg_usage.is_empty() { usage_map.insert("ipregistry".into(), Value::String(reg_usage)); }
-    if ipapi_usage != "null" && !ipapi_usage.is_empty() { usage_map.insert("ipapi".into(), Value::String(ipapi_usage)); }
-    if abuse_usage != "null" && !abuse_usage.is_empty() { usage_map.insert("AbuseIPDB".into(), Value::String(abuse_usage)); }
-    if ip2l_usage != "null" && !ip2l_usage.is_empty() { usage_map.insert("IP2LOCATION".into(), Value::String(ip2l_usage)); }
+    if iio_usage != "null" && !iio_usage.is_empty() {
+        usage_map.insert("IPinfo".into(), Value::String(iio_usage));
+    }
+    if reg_usage != "null" && !reg_usage.is_empty() {
+        usage_map.insert("ipregistry".into(), Value::String(reg_usage));
+    }
+    if ipapi_usage != "null" && !ipapi_usage.is_empty() {
+        usage_map.insert("ipapi".into(), Value::String(ipapi_usage));
+    }
+    if abuse_usage != "null" && !abuse_usage.is_empty() {
+        usage_map.insert("AbuseIPDB".into(), Value::String(abuse_usage));
+    }
+    if ip2l_usage != "null" && !ip2l_usage.is_empty() {
+        usage_map.insert("IP2LOCATION".into(), Value::String(ip2l_usage));
+    }
 
     // Type.Company: collect from all sources
     let mut company_map = serde_json::Map::new();
-    if iio_company_type != "null" && !iio_company_type.is_empty() { company_map.insert("IPinfo".into(), Value::String(iio_company_type)); }
-    if reg_company_type != "null" && !reg_company_type.is_empty() { company_map.insert("ipregistry".into(), Value::String(reg_company_type)); }
-    if ipapi_company_type != "null" && !ipapi_company_type.is_empty() { company_map.insert("ipapi".into(), Value::String(ipapi_company_type)); }
+    if iio_company_type != "null" && !iio_company_type.is_empty() {
+        company_map.insert("IPinfo".into(), Value::String(iio_company_type));
+    }
+    if reg_company_type != "null" && !reg_company_type.is_empty() {
+        company_map.insert("ipregistry".into(), Value::String(reg_company_type));
+    }
+    if ipapi_company_type != "null" && !ipapi_company_type.is_empty() {
+        company_map.insert("ipapi".into(), Value::String(ipapi_company_type));
+    }
 
     // Score: weighted average of available sources
     let total_score = {
         let mut total = 0.0;
         let mut count = 0u32;
-        if scam_score > 0.0 { total += scam_score; count += 1; }
-        if abuse_score > 0.0 { total += abuse_score; count += 1; }
-        if count > 0 { (total / count as f64) as u32 } else { 0 }
+        if scam_score > 0.0 {
+            total += scam_score;
+            count += 1;
+        }
+        if abuse_score > 0.0 {
+            total += abuse_score;
+            count += 1;
+        }
+        if count > 0 {
+            (total / count as f64) as u32
+        } else {
+            0
+        }
     };
 
     let result = serde_json::json!({
@@ -504,8 +580,8 @@ async fn run_ip_check() -> Result<String, String> {
             "Organization": org,
             "Latitude": lat,
             "Longitude": lon,
-            "DMS": "null",
-            "Map": "null",
+            "DMS": Value::Null,
+            "Map": Value::Null,
             "TimeZone": timezone,
             "City": { "Name": city_name },
             "Region": { "Code": country_code, "Name": country_name },
@@ -523,8 +599,8 @@ async fn run_ip_check() -> Result<String, String> {
             "SCAMALYTICS": format!("{}", scam_score as u32),
             "ipapi": format!("{}", ipapi_score as u32),
             "AbuseIPDB": format!("{}", abuse_score as u32),
-            "IPQS": "null".to_string(),
-            "DBIP": "null".to_string()
+            "IPQS": Value::Null,
+            "DBIP": Value::Null
         },
         "Factor": {
             "CountryCode": {
@@ -578,14 +654,14 @@ async fn run_ip_check() -> Result<String, String> {
             }
         },
         "Media": {
-            "TikTok": { "Status": yn(tt), "Region": "null", "Type": "null" },
-            "Bilibili": { "Status": yn(bl), "Region": "null", "Type": "null" },
-            "DisneyPlus": { "Status": yn(dp), "Region": "null", "Type": "null" },
-            "Netflix": { "Status": yn(nf), "Region": "null", "Type": "null" },
-            "Youtube": { "Status": yn(yt), "Region": "null", "Type": "null" },
-            "AmazonPrimeVideo": { "Status": yn(am), "Region": "null", "Type": "null" },
-            "Reddit": { "Status": yn(rd), "Region": "null", "Type": "null" },
-            "ChatGPT": { "Status": yn(gp), "Region": "null", "Type": "null" }
+            "TikTok": { "Status": yn(tt), "Region": Value::Null, "Type": Value::Null },
+            "Bilibili": { "Status": yn(bl), "Region": Value::Null, "Type": Value::Null },
+            "DisneyPlus": { "Status": yn(dp), "Region": Value::Null, "Type": Value::Null },
+            "Netflix": { "Status": yn(nf), "Region": Value::Null, "Type": Value::Null },
+            "Youtube": { "Status": yn(yt), "Region": Value::Null, "Type": Value::Null },
+            "AmazonPrimeVideo": { "Status": yn(am), "Region": Value::Null, "Type": Value::Null },
+            "Reddit": { "Status": yn(rd), "Region": Value::Null, "Type": Value::Null },
+            "ChatGPT": { "Status": yn(gp), "Region": Value::Null, "Type": Value::Null }
         },
         "Mail": {
             "Port25": null,
@@ -615,7 +691,10 @@ async fn run_ip_check_with_args(_args: Vec<String>) -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![run_ip_check, run_ip_check_with_args])
+        .invoke_handler(tauri::generate_handler![
+            run_ip_check,
+            run_ip_check_with_args
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

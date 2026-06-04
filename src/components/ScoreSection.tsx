@@ -62,6 +62,7 @@ export default function ScoreSection({ score }: { score: IPReport['Score'] }) {
   const entries = Object.entries(score);
   const totalEntry = entries.find(([k]) => k.toLowerCase().includes('total'));
   const totalScore = totalEntry ? toScore(totalEntry[1]) : null;
+  const showTotalRing = totalScore !== null && totalScore > 0;
   const ringSize = 120;
   const ringStroke = 10;
   const ringRadius = (ringSize - ringStroke) / 2;
@@ -72,9 +73,9 @@ export default function ScoreSection({ score }: { score: IPReport['Score'] }) {
     <div className="section p-4">
       <div className="section-title">风险评分</div>
 
-      {totalScore !== null && (
-        <div className="flex items-center gap-4 mb-4">
-          <div className="relative h-20 w-20 shrink-0">
+      {showTotalRing && (
+        <div className="mb-4 flex items-center gap-3 sm:gap-4">
+          <div className="relative h-16 w-16 shrink-0 sm:h-20 sm:w-20">
             <svg
               viewBox={`0 0 ${ringSize} ${ringSize}`}
               className="h-full w-full -rotate-90"
@@ -103,7 +104,7 @@ export default function ScoreSection({ score }: { score: IPReport['Score'] }) {
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span
-                className="text-2xl font-semibold leading-none"
+                className="text-lg font-semibold leading-none sm:text-2xl"
                 style={{ color: getScoreColor(totalScore) }}
               >
                 {totalScore}

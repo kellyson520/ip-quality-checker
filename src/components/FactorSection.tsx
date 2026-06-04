@@ -27,13 +27,17 @@ function FactorRow({ label, sources }: { label: string; sources: Record<string, 
   if (entries.length === 0) return null;
   return (
     <div className="py-1.5">
-      <div className="flex items-center justify-between">
+      <div className="space-y-2">
         <span className="data-label">{label}</span>
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 justify-end">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-3 md:grid-cols-4">
           {entries.map(([key, val]) => (
-            <div key={key} className="flex items-center gap-1" title={`${key}: ${String(val ?? '-')}`}>
+            <div
+              key={key}
+              className="flex h-5 min-w-0 items-center gap-1"
+              title={`${key}: ${String(val ?? '-')}`}
+            >
               <StatusDot value={normalizeFlag(val)} />
-              <span className="text-[10px] sm:text-[11px] text-[#555]">{key}</span>
+              <span className="truncate text-[10px] text-[#555] sm:text-[11px]">{key}</span>
             </div>
           ))}
         </div>

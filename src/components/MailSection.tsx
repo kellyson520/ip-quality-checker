@@ -60,7 +60,7 @@ export default function MailSection({ mail }: { mail: IPReport['Mail'] }) {
       )}
 
       {hasServices && (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-x-3 gap-y-1.5 mt-2">
+        <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 sm:grid-cols-4 md:grid-cols-6">
           {serviceEntries.map(({ name, val }) => (
             <div key={name} className="flex items-center gap-1.5">
               <StatusDot value={val} />

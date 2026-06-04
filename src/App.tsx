@@ -63,7 +63,7 @@ export default function App() {
     <div className="min-h-screen flex flex-col">
       <Header onRun={runCheck} loading={status === 'loading'} ip={data?.Head.IP} />
 
-      <main className="flex-1 max-w-[960px] w-full mx-auto px-3 sm:px-5 py-4 sm:py-6">
+      <main className="flex-1 max-w-[960px] w-full mx-auto overflow-hidden px-3 sm:px-5 py-4 sm:py-6">
         {status === 'idle' && !data && (
           <div className="flex flex-col items-center justify-center h-[70vh] gap-6 animate-fade-in">
             <h2 className="text-xl sm:text-2xl font-semibold text-white">IP Quality Check</h2>
@@ -94,8 +94,12 @@ export default function App() {
           <div className="space-y-3 sm:space-y-4 animate-fade-in">
             <IPOverview head={data.Head} info={data.Info} type={data.Type} />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-              <ScoreSection score={data.Score} />
-              <FactorSection factor={data.Factor} />
+              <div className="min-w-0">
+                <ScoreSection score={data.Score} />
+              </div>
+              <div className="min-w-0">
+                <FactorSection factor={data.Factor} />
+              </div>
             </div>
             <StreamingSection media={data.Media} />
             <MailSection mail={data.Mail} />

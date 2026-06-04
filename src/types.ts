@@ -13,8 +13,8 @@ export interface IPReport {
     Organization: string;
     Latitude: string;
     Longitude: string;
-    DMS?: string;
-    Map?: string;
+    DMS?: Scalar;
+    Map?: Scalar;
     TimeZone: string;
     City: {
       Name: string;
@@ -25,7 +25,7 @@ export interface IPReport {
     Region: { Code: string; Name: string };
     Continent: { Code: string; Name: string };
     RegisteredRegion?: { Code: string; Name: string };
-    Type: string;
+    Type: string | null;
   };
   Type: {
     Usage?: Record<string, Scalar>;
