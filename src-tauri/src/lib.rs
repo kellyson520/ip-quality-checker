@@ -817,11 +817,11 @@ const DISNEY_CLIENT_TOKEN: &str = "ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiR
 #[cfg(mobile)]
 async fn detect_disney() -> (Value, Value, Value) {
     let unlock_type = unlock_type_for("disneyplus.com", false).await;
-    const AUTH: &str = concat!("Bearer ", DISNEY_CLIENT_TOKEN);
+    let auth = format!("Bearer {}", DISNEY_CLIENT_TOKEN);
     let assertion_resp = match get_client()
         .post("https://disney.api.edge.bamgrid.com/devices")
         .header("User-Agent", USER_AGENT)
-        .header("authorization", AUTH)
+        .header("authorization", &auth)
         .header("content-type", "application/json; charset=UTF-8")
         .body(r#"{"deviceFamily":"browser","applicationRuntime":"chrome","deviceProfile":"windows","attributes":{}}"#)
         .send()
@@ -849,7 +849,7 @@ async fn detect_disney() -> (Value, Value, Value) {
     let token_resp = match post_text_with_headers(
         "https://disney.api.edge.bamgrid.com/token",
         &[
-            ("authorization", AUTH),
+            ("authorization", &auth),
             ("content-type", "application/x-www-form-urlencoded"),
         ],
         token_body,
@@ -1998,7 +1998,6 @@ async fn run_ip_check() -> Result<String, String> {
 #[cfg(mobile)]
 #[tauri::command]
 async fn run_ip_check_with_args(_args: Vec<String>) -> Result<String, String> {
-
     run_ip_check().await
 }
 
