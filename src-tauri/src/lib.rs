@@ -1,6 +1,8 @@
 #[cfg(mobile)]
 use serde_json::Value;
+#[cfg(desktop)]
 use std::io::Write;
+#[cfg(desktop)]
 use std::process::{Command, Stdio};
 
 /// Embedded IP quality check script (compiled into the binary, desktop only)
@@ -29,7 +31,7 @@ fn get_client() -> &'static reqwest::Client {
 fn find_bash() -> Result<String, String> {
     #[cfg(unix)]
     {
-        return Ok("bash".to_string());
+        Ok("bash".to_string())
     }
 
     #[cfg(windows)]
@@ -129,8 +131,10 @@ async fn run_ip_check_with_args(args: Vec<String>) -> Result<String, String> {
 
 #[cfg(desktop)]
 async fn run_script_blocking(args: Vec<String>) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || run_script(args))
+    let timeout = std::time::Duration::from_secs(30);
+    tokio::time::timeout(timeout, tauri::async_runtime::spawn_blocking(move || run_script(args)))
         .await
+        .map_err(|_| "检测超时（30秒）".to_string())?
         .map_err(|e| format!("检测任务异常: {}", e))?
 }
 
@@ -595,7 +599,7 @@ async fn fetch_ipregistry(ip: &str) -> Result<Value, String> {
         .nth(1)
         .and_then(|rest| rest.split('"').next())
         .filter(|value| !value.is_empty())
-        .unwrap_or("sb69ksjcajfs4c");
+        .ok_or("ipregistry: failed to extract API key from website")?;
     let url = format!("https://api.ipregistry.co/{}?hostname=true&key={}", ip, key);
     let text = fetch_text_with_headers(
         &url,
@@ -805,16 +809,19 @@ fn extract_youtube_region(body: &str) -> Option<String> {
     None
 }
 
+/// Disney+ public client token (not a secret - extracted from public Disney+ web app)
+#[cfg(mobile)]
+const DISNEY_CLIENT_TOKEN: &str = "ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84";
+
 /// Disney+ region detection (simplified - matching ip.sh key logic)
 #[cfg(mobile)]
 async fn detect_disney() -> (Value, Value, Value) {
     let unlock_type = unlock_type_for("disneyplus.com", false).await;
-    const AUTH: &str =
-        "Bearer ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84";
+    let auth = format!("Bearer {}", DISNEY_CLIENT_TOKEN);
     let assertion_resp = match get_client()
         .post("https://disney.api.edge.bamgrid.com/devices")
         .header("User-Agent", USER_AGENT)
-        .header("authorization", AUTH)
+        .header("authorization", &auth)
         .header("content-type", "application/json; charset=UTF-8")
         .body(r#"{"deviceFamily":"browser","applicationRuntime":"chrome","deviceProfile":"windows","attributes":{}}"#)
         .send()
@@ -842,7 +849,7 @@ async fn detect_disney() -> (Value, Value, Value) {
     let token_resp = match post_text_with_headers(
         "https://disney.api.edge.bamgrid.com/token",
         &[
-            ("authorization", AUTH),
+            ("authorization", &auth),
             ("content-type", "application/x-www-form-urlencoded"),
         ],
         token_body,
@@ -873,7 +880,7 @@ async fn detect_disney() -> (Value, Value, Value) {
         "https://disney.api.edge.bamgrid.com/graph/v1/device/graphql",
         &[(
             "authorization",
-            "ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84",
+            DISNEY_CLIENT_TOKEN,
         )],
         graphql_body,
     )
@@ -1081,7 +1088,7 @@ fn extract_json_string_field(body: &str, field: &str) -> Option<String> {
 
 /// Bilibili TV detection (simple HTTP check like ip.sh)
 #[cfg(mobile)]
-async fn check_bilibili() -> (Value, Value, Value) {
+async fn detect_bilibili() -> (Value, Value, Value) {
     let url = "https://www.bilibili.tv/";
     let status = check_http_status(url).await;
     if status == 200 {
@@ -1596,6 +1603,7 @@ async fn run_ip_check() -> Result<String, String> {
         (am_status, am_region, am_type),
         (rd_status, rd_region, rd_type),
         (gp_status, gp_region, gp_type),
+        (bl_status, bl_region, bl_type),
     ) = tokio::join!(
         detect_tiktok(&ip),
         detect_netflix(),
@@ -1603,7 +1611,8 @@ async fn run_ip_check() -> Result<String, String> {
         detect_youtube(),
         detect_amazon(),
         detect_reddit(),
-        detect_chatgpt()
+        detect_chatgpt(),
+        detect_bilibili()
     );
 
     // Step 6: Check mail services. ip.sh only tests providers when local port 25 works.
@@ -1961,7 +1970,8 @@ async fn run_ip_check() -> Result<String, String> {
             "Youtube": { "Status": yt_status, "Region": yt_region, "Type": yt_type },
             "AmazonPrimeVideo": { "Status": am_status, "Region": am_region, "Type": am_type },
             "Reddit": { "Status": rd_status, "Region": rd_region, "Type": rd_type },
-            "ChatGPT": { "Status": gp_status, "Region": gp_region, "Type": gp_type }
+            "ChatGPT": { "Status": gp_status, "Region": gp_region, "Type": gp_type },
+            "Bilibili": { "Status": bl_status, "Region": bl_region, "Type": bl_type }
         },
         "Mail": {
             "Port25": port25,
