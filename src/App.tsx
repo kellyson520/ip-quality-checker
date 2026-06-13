@@ -9,6 +9,16 @@ import FactorSection from './components/FactorSection';
 import StreamingSection from './components/StreamingSection';
 import MailSection from './components/MailSection';
 
+// ── UI string constants ──────────────────────────────────────────
+const UI_TITLE = 'IP Quality Check';
+const UI_SUBTITLE = '检测 IP 地址的代理/VPN 使用情况、风险评分和流媒体解锁状态';
+const UI_BTN_START = '开始检测';
+const UI_BTN_RETRY = '重试';
+const UI_LOADING_TEXT = '正在检测...';
+const UI_FOOTER_DONE = '检测完成';
+const UI_FOOTER_LOADING = '检测中...';
+const UI_FOOTER_READY = '就绪';
+
 type AppStatus = 'idle' | 'loading' | 'done' | 'error';
 
 export default function App() {
@@ -41,12 +51,12 @@ export default function App() {
       <main className="flex-1 max-w-[960px] w-full mx-auto overflow-hidden px-3 sm:px-5 py-4 sm:py-6">
         {status === 'idle' && !data && (
           <div className="flex flex-col items-center justify-center h-[70vh] gap-6 animate-fade-in">
-            <h2 className="text-xl sm:text-2xl font-semibold text-white">IP Quality Check</h2>
+            <h2 className="text-xl sm:text-2xl font-semibold text-white">{UI_TITLE}</h2>
             <p className="text-[#666] text-sm max-w-sm text-center leading-relaxed px-4">
-              检测 IP 地址的代理/VPN 使用情况、风险评分和流媒体解锁状态
+              {UI_SUBTITLE}
             </p>
             <button onClick={runCheck} className="btn-run mt-2">
-              开始检测
+              {UI_BTN_START}
             </button>
           </div>
         )}
@@ -54,14 +64,14 @@ export default function App() {
         {status === 'loading' && (
           <div className="flex flex-col items-center justify-center h-[70vh] gap-4 animate-fade-in">
             <div className="w-5 h-5 border-2 border-[#333] border-t-white rounded-full animate-spin" />
-            <p className="text-[#666] text-sm">正在检测...</p>
+            <p className="text-[#666] text-sm">{UI_LOADING_TEXT}</p>
           </div>
         )}
 
         {status === 'error' && (
           <div className="flex flex-col items-center justify-center h-[70vh] gap-4 animate-fade-in">
             <p className="text-[#f87171] text-sm">{error}</p>
-            <button onClick={runCheck} className="btn-run">重试</button>
+            <button onClick={runCheck} className="btn-run">{UI_BTN_RETRY}</button>
           </div>
         )}
 
@@ -85,10 +95,10 @@ export default function App() {
       <footer className="app-footer flex items-center justify-between px-3 sm:px-5 pt-2.5 border-t border-[#2a2a2a] text-[10px] sm:text-[11px] text-[#444] max-w-[960px] w-full mx-auto">
         <span>
           {status === 'done'
-            ? `检测完成${durationMs ? ` · ${(durationMs / 1000).toFixed(1)}s` : ''}`
+            ? `${UI_FOOTER_DONE}${durationMs ? ` · ${(durationMs / 1000).toFixed(1)}s` : ''}`
             : status === 'loading'
-              ? '检测中...'
-              : '就绪'}
+              ? UI_FOOTER_LOADING
+              : UI_FOOTER_READY}
         </span>
         {data && <span className="truncate ml-2">{data.Head.Time}</span>}
       </footer>
