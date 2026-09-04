@@ -1,5 +1,5 @@
 #!/bin/bash
-script_version="v2026-08-09"
+script_version="v2026-09-04"
 check_bash(){
 current_bash_version=$(bash --version|head -n 1|awk -F ' ' '{for (i=1; i<=NF; i++) if ($i ~ /^[0-9]+\.[0-9]+\.[0-9]+/) {print $i; exit}}'|cut -d . -f 1)
 if [ "$current_bash_version" = "0" ]||[ "$current_bash_version" = "1" ]||[ "$current_bash_version" = "2" ]||[ "$current_bash_version" = "3" ];then
@@ -925,12 +925,7 @@ show_progress_bar "$temp_info" $((40-6-${sinfo[ldatabase]}))&
 bar_pid="$!"&&disown "$bar_pid"
 trap "kill_progress_bar" RETURN
 ipapi=()
-if [[ $IP == *:* ]];then
-local RESPONSE=$(curl -Ls -m 10 -H 'origin: https://ipapi.is' "https://api.ipapi.is/?q=$IP")
-else
-local RESPONSE=$(curl $CurlARG -sL -m 10 -H 'origin: https://ipapi.is' "https://api.ipapi.is/?q=$IP")
-fi
-echo "$RESPONSE"|jq . >/dev/null 2>&1||RESPONSE=""
+local RESPONSE=$(curl $CurlARG -sL -$1 -m 10 "https://ipinfo.check.place/$IP?db=ipapi")
 ipapi[usetype]=$(echo "$RESPONSE"|jq -r '.asn.type')
 ipapi[comtype]=$(echo "$RESPONSE"|jq -r '.company.type')
 shopt -s nocasematch
